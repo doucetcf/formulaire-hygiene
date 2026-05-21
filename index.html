@@ -334,7 +334,7 @@
         <div class="upload-zone" onclick="document.getElementById('photo').click()">
           <div class="upload-icon">📁</div>
           <p>Glisser-déposer un fichier ou <a>parcourir</a></p>
-          <input type="file" id="photo" name="attachment" accept="image/*" onchange="afficherNomFichier()">
+          <input type="file" id="photo" name="attachment" accept="image/*" capture="environment" onchange="afficherNomFichier()">
         </div>
         <div class="file-name" id="file-name"></div>
       </div>
