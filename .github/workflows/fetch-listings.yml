@@ -60,7 +60,13 @@ jobs:
           git add immoradar/data/listings.json
           COUNT=$(node -e "const d=JSON.parse(require('fs').readFileSync('immoradar/data/listings.json')); console.log(d.listings?.length ?? 0)")
           git commit -m "MAJ annonces $(date +%Y-%m-%d) — ${COUNT} propriétés"
-          git push
+          # main a pu bouger entre-temps : on rebase avant de pousser, avec quelques tentatives
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && exit 0
+            echo "Push tentative $i échouée, nouvelle tentative…"
+            sleep $((i * 3))
+          done
+          echo "Échec du push après plusieurs tentatives"; exit 1
 
       - name: Résumé
         run: |
