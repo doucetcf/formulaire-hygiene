@@ -122,9 +122,11 @@ function parseCard(card, region) {
     || card.match(/class="category"[^>]*>([\s\S]*?)<\/div>/)?.[1] || '');
   const type = detectType(catRaw);
 
-  // Adresse : 2 <div> dans .address (rue, puis "Ville (Quartier)")
-  const addrBlock = card.match(/class="address"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/)?.[1] || '';
-  const addrLines = [...addrBlock.matchAll(/<div>([\s\S]*?)<\/div>/g)].map((m) => stripTags(m[1]));
+  // Adresse : 2 <div> de texte dans .address (rue, puis "Ville (Quartier)")
+  const addrPos = card.indexOf('class="address"');
+  const addrZone = addrPos >= 0 ? card.slice(addrPos, addrPos + 600) : '';
+  const addrLines = [...addrZone.matchAll(/<div>([^<]+)<\/div>/g)]
+    .map((m) => stripTags(m[1])).filter(Boolean);
   const address = addrLines[0] || `Propriété ${id}`;
   const cityRaw = addrLines[1] || '';
   const cityMatch = cityRaw.match(/^(.*?)\s*\(([^)]+)\)\s*$/);

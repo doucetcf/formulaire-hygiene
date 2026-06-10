@@ -260,7 +260,7 @@ function sourceBadges(l) {
 }
 
 function cardPhoto(l) {
-  var cnt = l.photoCount;
+  var cnt = l.photosAvailable || l.photoCount;
   var thumb = cnt > 1 ? ["<span class=\"photo-count\">", cnt, "</span>"].join("") : "";
   if (l.photoUrl) {
     return ["<div class=\"card-photo card-photo--real\">",
@@ -348,7 +348,7 @@ function openListing(id) {
           ${photos.length > 1 ? `<button class="gallery-prev" onclick="galleryNav(-1)">‹</button><button class="gallery-next" onclick="galleryNav(1)">›</button>` : ''}
         </div>
         ${photos.length > 1 ? `<div class="gallery-thumbs">${photos.slice(0, 8).map((p, i) => `<img src="${p}" class="${i === 0 ? 'active' : ''}" onclick="gallerySet(${i})" />`).join('')}</div>` : ''}
-        <p class="muted" style="margin:4px 0 0;font-size:11px">${photos.length} photo${photos.length > 1 ? 's' : ''}</p>
+        <p class="muted" style="margin:4px 0 0;font-size:11px">${l.photosAvailable && l.photosAvailable > photos.length ? `Photo de couverture — voir les ${l.photosAvailable} photos sur l'annonce d'origine ↓` : `${photos.length} photo${photos.length > 1 ? 's' : ''}`}</p>
       </div>`
     : `<div class="detail-hero" style="${heroStyle(l)}">${TYPE_EMOJI[l.type] || '🏠'}</div>`;
 
