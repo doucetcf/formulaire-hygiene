@@ -36,6 +36,21 @@ jobs:
         with:
           node-version: '22'
 
-      # ── MODE DIAGNOSTIC TEMPORAIRE (sera remplacé par le vrai pipeline) ──
-      - name: Diagnostic Centris
-        run: node immoradar/tools/connectors/discover-centris.mjs
+      # ── TEST TEMPORAIRE : lance le connecteur et montre un échantillon ──
+      - name: Test connecteur Centris
+        run: |
+          node immoradar/tools/connectors/centris.mjs --debug || true
+          echo "──────── ÉCHANTILLON (3 premières annonces) ────────"
+          node -e "
+            const d = JSON.parse(require('fs').readFileSync('immoradar/data/listings.json'));
+            console.log('Total:', d.sourceStats);
+            for (const l of d.listings.slice(0,3)) {
+              console.log(JSON.stringify({
+                prix: l.price, type: l.typeLabel, adr: l.address, ville: l.city,
+                quartier: l.district, cac: l.bedrooms, sdb: l.bathrooms,
+                lat: l.lat, lng: l.lng, revenu: l.revenue,
+                photo: (l.photoUrl||'').slice(0,70), photosDispo: l.photosAvailable,
+                url: l.sources[0].url,
+              }, null, 1));
+            }
+          "
