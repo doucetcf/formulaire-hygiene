@@ -1,5 +1,5 @@
 /* =====================================================================
- * ImmoRadar Québec — moteur de recherche immobilier multi-sources
+ * ImmoRadar Québec -- moteur de recherche immobilier multi-sources
  * Données de démonstration ; architecture prête pour de vrais connecteurs.
  * ===================================================================== */
 'use strict';
@@ -259,6 +259,18 @@ function sourceBadges(l) {
   return l.sources.map((s) => `<span class="src src-${s.source}">${SOURCE_LABELS[s.source]}</span>`).join('');
 }
 
+function cardPhoto(l) {
+  var cnt = l.photoCount;
+  var thumb = cnt > 1 ? ["<span class=\"photo-count\">", cnt, "</span>"].join("") : "";
+  if (l.photoUrl) {
+    return ["<div class=\"card-photo card-photo--real\">",
+      "<img src=\"", l.photoUrl, "\" alt=\"photo\" loading=\"lazy\"",
+      " onerror=\"this.closest('.card-photo').classList.add('card-photo--fallback');this.remove();\" />",
+      thumb, "</div>"].join("");
+  }
+  return ["<div class=\"card-photo\" style=\"", heroStyle(l), "\">",
+    TYPE_EMOJI[l.type] || "\u{1F3E0}", cnt ? thumb : "", "</div>"].join("");
+}
 function renderCards(list) {
   const wrap = $('#cards');
   if (!list.length) {
@@ -267,11 +279,8 @@ function renderCards(list) {
     return;
   }
   wrap.innerHTML = list.map((l) => `
-    <article class="card" data-id="${l.id}" style="--h:1">
-      <div class="card-photo" style="${heroStyle(l)}">
-        ${TYPE_EMOJI[l.type] || '🏠'}
-        <span class="photo-count">📷 ${l.photoCount}</span>
-      </div>
+    <article class="card" data-id="${l.id}">
+      ${cardPhoto(l)}
       <div class="card-body">
         <div class="card-price">${fmtPrice(l.price)}${l.revenue ? ` <span class="card-sub">· revenus ${fmtPrice(l.revenue)}/an</span>` : ''}</div>
         <div class="card-title">${l.typeLabel}</div>
@@ -283,7 +292,7 @@ function renderCards(list) {
           ${isNew(l) ? '<span class="badge-new">NOUVEAU</span>' : ''}
           ${l.openHouse ? '<span class="badge-soft">Visite libre</span>' : ''}
           ${l.repossession ? '<span class="badge-soft">Reprise</span>' : ''}
-          ${l.features.waterfront ? '<span class="badge-soft">Bord de l’eau</span>' : ''}
+          ${l.features.waterfront ? '<span class="badge-soft">Bord de l\'eau</span>' : ''}
           <span class="badge-soft">${daysOnMarket(l)} j sur le marché</span>
         </div>
       </div>
@@ -304,7 +313,7 @@ function renderMarkers(list) {
     });
     const m = L.marker([l.lat, l.lng], { icon });
     m.bindPopup(`
-      <b>${fmtPrice(l.price)}</b> — ${l.typeLabel}<br>
+      <b>${fmtPrice(l.price)}</b> -- ${l.typeLabel}<br>
       ${l.address}, ${l.city}<br>
       ${specLine(l)}<br>
       <span class="popup-link" data-open="${l.id}">Voir la fiche complète →</span>`);
@@ -317,26 +326,45 @@ function renderMarkers(list) {
 function openListing(id) {
   const l = state.merged.find((x) => x.id === id);
   if (!l) return;
+  state._openListing = l;
+  galleryPhotos = l.photos ?? [];
+  galleryIndex = 0;
   const F = l.features;
   const tags = [
     F.garage && 'Garage', F.parkingSpots && `${F.parkingSpots} stationnement(s)`,
-    F.pool && 'Piscine', F.waterfront && 'Bord de l’eau', F.waterAccess && 'Accès à l’eau',
+    F.pool && 'Piscine', F.waterfront && "Bord de l\'eau", F.waterAccess && "Accès à l\'eau",
     F.fireplace && 'Foyer / poêle', F.elevator && 'Ascenseur',
     F.accessible && 'Adapté mobilité réduite', F.centralAir && 'Climatisation centrale',
     l.openHouse && 'Visite libre', l.repossession && 'Reprise bancaire',
     l.newConstruction && 'Construction neuve',
   ].filter(Boolean);
 
+  // Galerie de photos
+  const photos = l.photos?.length ? l.photos : (l.photoUrl ? [l.photoUrl] : []);
+  const galleryHtml = photos.length
+    ? `<div class="gallery">
+        <div class="gallery-main">
+          <img id="gallery-img" src="${photos[0]}" alt="${l.typeLabel} à ${l.city}" />
+          ${photos.length > 1 ? `<button class="gallery-prev" onclick="galleryNav(-1)">‹</button><button class="gallery-next" onclick="galleryNav(1)">›</button>` : ''}
+        </div>
+        ${photos.length > 1 ? `<div class="gallery-thumbs">${photos.slice(0, 8).map((p, i) => `<img src="${p}" class="${i === 0 ? 'active' : ''}" onclick="gallerySet(${i})" />`).join('')}</div>` : ''}
+        <p class="muted" style="margin:4px 0 0;font-size:11px">${photos.length} photo${photos.length > 1 ? 's' : ''}</p>
+      </div>`
+    : `<div class="detail-hero" style="${heroStyle(l)}">${TYPE_EMOJI[l.type] || '🏠'}</div>`;
+
+  const isDemo = l.sources.every((s) => s.url?.includes('fictif') ||
+    !s.url?.startsWith('https://www.centris') && !s.url?.startsWith('https://duproprio') && !s.url?.startsWith('https://ubee'));
+
   $('#modal-listing-body').innerHTML = `
-    <div class="detail-hero" style="${heroStyle(l)}">${TYPE_EMOJI[l.type] || '🏠'}</div>
+    ${galleryHtml}
     <div class="detail-price">${fmtPrice(l.price)}</div>
     <h2 style="margin:4px 0 2px">${l.typeLabel}</h2>
-    <p class="muted" style="margin:0">${l.address}, ${l.district ? l.district + ', ' : ''}${l.city} — ${l.region}</p>
+    <p class="muted" style="margin:0">${l.address}, ${l.district ? l.district + ', ' : ''}${l.city} -- ${l.region}</p>
     <div class="card-badges" style="margin-top:8px">${sourceBadges(l)} ${isNew(l) ? '<span class="badge-new">NOUVEAU</span>' : ''}</div>
 
     <div class="detail-grid">
       ${l.bedrooms ? `<div><b>Chambres</b>${l.bedrooms}</div>` : ''}
-      ${l.bathrooms ? `<div><b>Salles de bain</b>${l.bathrooms}${l.powderRooms ? ` (+${l.powderRooms} s. d’eau)` : ''}</div>` : ''}
+      ${l.bathrooms ? `<div><b>Salles de bain</b>${l.bathrooms}${l.powderRooms ? ` (+${l.powderRooms} s. d\'eau)` : ''}</div>` : ''}
       ${l.rooms ? `<div><b>Pièces</b>${l.rooms}</div>` : ''}
       ${l.levels > 1 ? `<div><b>Étages</b>${l.levels}</div>` : ''}
       ${l.livingAreaSqft ? `<div><b>Aire habitable</b>${fmtNum(l.livingAreaSqft)} pi²</div>` : ''}
@@ -349,19 +377,32 @@ function openListing(id) {
     </div>
 
     ${tags.length ? `<div class="feature-tags">${tags.map((t) => `<span class="badge-soft">${t}</span>`).join('')}</div>` : ''}
-    <p style="font-size:14px;line-height:1.55">${l.description}</p>
+    ${l.description ? `<p style="font-size:14px;line-height:1.55">${l.description}</p>` : ''}
 
-    <h3 style="margin-bottom:6px">Voir l’annonce d’origine</h3>
-    ${l.sources.length > 1 ? '<p class="muted" style="margin-top:0">Cette propriété est listée sur plusieurs plateformes — les annonces ont été fusionnées automatiquement.</p>' : ''}
+    <h3 style="margin-bottom:6px">Voir l'annonce d'origine</h3>
+    ${l.sources.length > 1 ? '<p class="muted" style="margin-top:0">Cette propriété est listée sur plusieurs plateformes.</p>' : ''}
     <div class="source-links">
       ${l.sources.map((s) => `
-        <a class="src-${s.source}" href="${s.url}" target="_blank" rel="noopener"
-           title="Annonce de démonstration — lien fictif">
-           ${SOURCE_LABELS[s.source]} · ${fmtPrice(s.price)} ↗</a>`).join('')}
+        <a class="src-${s.source}" href="${s.url}" target="_blank" rel="noopener noreferrer">
+           ${SOURCE_LABELS[s.source] ?? s.source} · ${fmtPrice(s.price)} ↗</a>`).join('')}
     </div>
-    <p class="muted" style="margin-top:14px">⚠️ Mode démo : annonce fictive, le lien d’origine ne mène à aucune vraie propriété.</p>`;
+    ${isDemo ? '<p class="muted" style="margin-top:14px">⚠️ Mode démo : annonce fictive.</p>' : ''}`;
   $('#modal-listing').hidden = false;
 }
+
+// ------------------------------------------------------------------ Galerie photos
+let galleryPhotos = [];
+let galleryIndex = 0;
+
+function gallerySet(i) {
+  galleryPhotos = state._openListing?.photos ?? [];
+  galleryIndex = Math.max(0, Math.min(i, galleryPhotos.length - 1));
+  const img = document.getElementById('gallery-img');
+  if (!img) return;
+  img.src = galleryPhotos[galleryIndex];
+  document.querySelectorAll('.gallery-thumbs img').forEach((t, j) => t.classList.toggle('active', j === galleryIndex));
+}
+function galleryNav(dir) { gallerySet(galleryIndex + dir); }
 
 // ------------------------------------------------------------------ Favoris
 function toggleFav(id) {
@@ -494,7 +535,7 @@ function filtersFromSnapshot(s) {
 function openSearchesModal() {
   const wrap = $('#saved-list');
   if (!state.savedSearches.length) {
-    wrap.innerHTML = '<p class="empty">Aucune recherche sauvegardée pour l’instant.<br>Réglez vos filtres, tracez vos secteurs, puis cliquez « Sauvegarder cette recherche ».</p>';
+    wrap.innerHTML = '<p class="empty">Aucune recherche sauvegardée pour l\'instant.<br>Réglez vos filtres, tracez vos secteurs, puis cliquez « Sauvegarder cette recherche ».</p>';
   } else {
     wrap.innerHTML = state.savedSearches.map((s) => {
       const news = countNewFor(s);
@@ -624,7 +665,7 @@ async function boot() {
   } catch (err) {
     $('#cards').innerHTML = `<div class="empty">Impossible de charger les annonces (${err.message}).<br>
       Si vous ouvrez le fichier localement, servez le dossier via un petit serveur web
-      (ex. <code>npx serve immoradar</code>) — le navigateur bloque <code>fetch</code> en file://.</div>`;
+      (ex. <code>npx serve immoradar</code>) -- le navigateur bloque <code>fetch</code> en file://.</div>`;
   }
 }
 

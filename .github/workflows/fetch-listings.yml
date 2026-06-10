@@ -1,0 +1,78 @@
+name: Mise à jour des annonces (Centris)
+
+on:
+  schedule:
+    # Tous les jours à 7h30 EST (11h30 UTC) — après le rush du matin
+    - cron: '30 11 * * *'
+  workflow_dispatch:
+    # Permet de déclencher manuellement depuis l'onglet Actions de GitHub
+    inputs:
+      max_pages:
+        description: 'Pages max par ville (défaut: 10)'
+        required: false
+        default: '10'
+      debug:
+        description: 'Mode debug (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  fetch:
+    name: Récupérer les annonces
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    permissions:
+      contents: write   # pour pouvoir committer listings.json
+
+    steps:
+      - name: Cloner le dépôt
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configurer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Récupérer les annonces Centris
+        env:
+          MAX_PAGES: ${{ github.event.inputs.max_pages || '10' }}
+          DEBUG_FLAG: ${{ github.event.inputs.debug == 'true' && '--debug' || '' }}
+        run: |
+          node immoradar/tools/connectors/centris.mjs \
+            --max-per-city=$MAX_PAGES \
+            $DEBUG_FLAG
+
+      - name: Vérifier si les données ont changé
+        id: diff
+        run: |
+          git diff --quiet immoradar/data/listings.json \
+            && echo "changed=false" >> $GITHUB_OUTPUT \
+            || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Committer et pousser si changements
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name  "ImmoRadar Bot"
+          git config user.email "immoradar-bot@users.noreply.github.com"
+          git add immoradar/data/listings.json
+          COUNT=$(node -e "const d=JSON.parse(require('fs').readFileSync('immoradar/data/listings.json')); console.log(d.listings?.length ?? 0)")
+          git commit -m "MAJ annonces $(date +%Y-%m-%d) — ${COUNT} propriétés"
+          git push
+
+      - name: Résumé
+        run: |
+          echo "## 📊 Résultat du fetch" >> $GITHUB_STEP_SUMMARY
+          node -e "
+            const d = JSON.parse(require('fs').readFileSync('immoradar/data/listings.json'));
+            const s = d.sourceStats || {};
+            console.log('| Source | Propriétés |');
+            console.log('|--------|-----------|');
+            console.log('| Centris | ' + (s.centris ?? '?') + ' |');
+            console.log('| Autres | ' + (s.other ?? '?') + ' |');
+            console.log('| **Total** | **' + (s.total ?? d.listings?.length ?? '?') + '** |');
+            console.log('');
+            console.log('Mis à jour le ' + new Date(d.generatedAt).toLocaleString('fr-CA'));
+          " >> $GITHUB_STEP_SUMMARY
