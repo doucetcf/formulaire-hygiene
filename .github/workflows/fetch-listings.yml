@@ -36,6 +36,11 @@ jobs:
         with:
           node-version: '22'
 
+      # ── DIAGNOSTIC TEMPORAIRE (à retirer une fois le connecteur réparé) ──
+      - name: Diagnostic Centris
+        continue-on-error: true
+        run: node immoradar/tools/connectors/discover-centris.mjs
+
       - name: Récupérer les annonces Centris
         env:
           MAX_PAGES: ${{ github.event.inputs.max_pages || '10' }}
