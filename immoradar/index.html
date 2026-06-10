@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ImmoRadar Québec — Recherche immobilière multi-sources</title>
+  <meta name="description" content="Moteur de recherche immobilier personnalisé combinant Centris, DuProprio et Ubee. Filtres avancés et tracé de secteurs personnalisés sur carte." />
+
+  <!-- Bibliothèques auto-hébergées (aucune dépendance CDN) -->
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="vendor/leaflet-draw/leaflet.draw.css" />
+  <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css" />
+  <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.Default.css" />
+
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo">📡</span>
+      <div>
+        <h1>ImmoRadar <span>Québec</span></h1>
+        <p class="tagline">Centris + DuProprio + Ubee, un seul radar</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button id="btn-saved-searches" class="btn-ghost" title="Recherches sauvegardées">
+        🔖 Recherches <span id="saved-count" class="pill" hidden>0</span>
+      </button>
+      <button id="btn-favorites" class="btn-ghost" title="Mes favoris">
+        ❤️ Favoris <span id="fav-count" class="pill" hidden>0</span>
+      </button>
+      <span class="demo-badge" title="Les annonces affichées sont des données fictives de démonstration">MODE DÉMO</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- ====================== PANNEAU DE FILTRES ====================== -->
+    <aside class="filters" id="filters-panel">
+      <div class="filters-head">
+        <h2>Filtres</h2>
+        <button id="btn-reset" class="btn-link">Réinitialiser</button>
+      </div>
+
+      <section class="fgroup">
+        <input type="search" id="f-keyword" placeholder="Mot-clé, rue, ville, quartier…" />
+      </section>
+
+      <section class="fgroup">
+        <h3>Sources</h3>
+        <div class="checks" id="f-sources">
+          <label><input type="checkbox" value="centris" checked /> <span class="src src-centris">Centris</span></label>
+          <label><input type="checkbox" value="duproprio" checked /> <span class="src src-duproprio">DuProprio</span></label>
+          <label><input type="checkbox" value="ubee" checked /> <span class="src src-ubee">Ubee</span></label>
+        </div>
+      </section>
+
+      <section class="fgroup">
+        <h3>Catégorie de propriété</h3>
+        <div class="checks" id="f-types">
+          <label><input type="checkbox" value="unifamiliale" /> Maison unifamiliale</label>
+          <label><input type="checkbox" value="condo" /> Condo / Appartement</label>
+          <label><input type="checkbox" value="plex" /> Plex (2 à 5 logements)</label>
+          <label><input type="checkbox" value="maison-ville" /> Maison de ville</label>
+          <label><input type="checkbox" value="chalet" /> Chalet / Villégiature</label>
+          <label><input type="checkbox" value="fermette" /> Fermette</label>
+          <label><input type="checkbox" value="terrain" /> Terrain</label>
+          <label><input type="checkbox" value="intergeneration" /> Intergénération</label>
+        </div>
+      </section>
+
+      <section class="fgroup">
+        <h3>Prix</h3>
+        <div class="range-pair">
+          <input type="number" id="f-price-min" placeholder="Min $" min="0" step="10000" />
+          <span>–</span>
+          <input type="number" id="f-price-max" placeholder="Max $" min="0" step="10000" />
+        </div>
+      </section>
+
+      <section class="fgroup">
+        <h3>Chambres à coucher</h3>
+        <div class="seg" id="f-beds">
+          <button data-v="0" class="on">Tous</button><button data-v="1">1+</button><button data-v="2">2+</button><button data-v="3">3+</button><button data-v="4">4+</button><button data-v="5">5+</button>
+        </div>
+      </section>
+
+      <section class="fgroup">
+        <h3>Salles de bain</h3>
+        <div class="seg" id="f-baths">
+          <button data-v="0" class="on">Tous</button><button data-v="1">1+</button><button data-v="2">2+</button><button data-v="3">3+</button>
+        </div>
+      </section>
+
+      <section class="fgroup">
+        <h3>Superficie</h3>
+        <div class="range-pair">
+          <input type="number" id="f-area-min" placeholder="Habitable min (pi²)" min="0" step="100" />
+        </div>
+        <div class="range-pair">
+          <input type="number" id="f-lot-min" placeholder="Terrain min (m²)" min="0" step="100" />
+        </div>
+      </section>
+
+      <section class="fgroup">
+        <h3>Année de construction</h3>
+        <div class="range-pair">
+          <input type="number" id="f-year-min" placeholder="De" min="1800" max="2030" />
+          <span>–</span>
+          <input type="number" id="f-year-max" placeholder="À" min="1800" max="2030" />
+        </div>
+      </section>
+
+      <section class="fgroup">
+        <h3>Caractéristiques</h3>
+        <div class="checks" id="f-features">
+          <label><input type="checkbox" value="garage" /> Garage</label>
+          <label><input type="checkbox" value="parking" /> Stationnement</label>
+          <label><input type="checkbox" value="pool" /> Piscine</label>
+          <label><input type="checkbox" value="waterfront" /> Bord de l’eau</label>
+          <label><input type="checkbox" value="waterAccess" /> Accès à l’eau</label>
+          <label><input type="checkbox" value="fireplace" /> Foyer / poêle</label>
+          <label><input type="checkbox" value="elevator" /> Ascenseur</label>
+          <label><input type="checkbox" value="accessible" /> Adapté mobilité réduite</label>
+          <label><input type="checkbox" value="centralAir" /> Climatisation centrale</label>
+        </div>
+      </section>
+
+      <section class="fgroup">
+        <h3>Particularités</h3>
+        <div class="checks" id="f-extras">
+          <label><input type="checkbox" value="openHouse" /> Visite libre</label>
+          <label><input type="checkbox" value="repossession" /> Reprise bancaire</label>
+          <label><input type="checkbox" value="newConstruction" /> Construction neuve</label>
+          <label><input type="checkbox" value="multiSource" /> Listée sur 2+ plateformes</label>
+        </div>
+      </section>
+
+      <section class="fgroup">
+        <h3>Revenus annuels (plex)</h3>
+        <div class="range-pair">
+          <input type="number" id="f-revenue-min" placeholder="Revenus min $" min="0" step="1000" />
+        </div>
+      </section>
+
+      <section class="fgroup">
+        <h3>Sur le marché depuis</h3>
+        <select id="f-dom">
+          <option value="">Peu importe</option>
+          <option value="1">Moins de 24 h</option>
+          <option value="3">3 jours ou moins</option>
+          <option value="7">7 jours ou moins</option>
+          <option value="14">14 jours ou moins</option>
+          <option value="30">30 jours ou moins</option>
+        </select>
+      </section>
+
+      <button id="btn-save-search" class="btn-primary wide">💾 Sauvegarder cette recherche</button>
+    </aside>
+
+    <!-- ====================== RÉSULTATS ====================== -->
+    <section class="results">
+      <div class="results-head">
+        <div>
+          <strong id="result-count">…</strong>
+          <span id="zone-indicator" class="zone-chip" hidden>📐 <span id="zone-count"></span> secteur(s) tracé(s) <button id="btn-clear-zones" title="Effacer les secteurs">✕</button></span>
+        </div>
+        <select id="sort">
+          <option value="recent">Plus récentes</option>
+          <option value="price-asc">Prix croissant</option>
+          <option value="price-desc">Prix décroissant</option>
+          <option value="area-desc">Superficie habitable</option>
+          <option value="lot-desc">Superficie du terrain</option>
+        </select>
+      </div>
+      <div id="cards" class="cards"></div>
+    </section>
+
+    <!-- ====================== CARTE ====================== -->
+    <section class="map-wrap">
+      <div id="map"></div>
+      <div class="map-hint">✏️ Utilisez les outils à gauche de la carte pour tracer un secteur personnalisé (polygone, rectangle ou cercle)</div>
+    </section>
+  </main>
+
+  <!-- ====================== MODALE FICHE ====================== -->
+  <div class="modal-backdrop" id="modal-listing" hidden>
+    <div class="modal">
+      <button class="modal-close" data-close>✕</button>
+      <div id="modal-listing-body"></div>
+    </div>
+  </div>
+
+  <!-- ====================== MODALE RECHERCHES SAUVEGARDÉES ====================== -->
+  <div class="modal-backdrop" id="modal-searches" hidden>
+    <div class="modal">
+      <button class="modal-close" data-close>✕</button>
+      <h2>🔖 Recherches sauvegardées</h2>
+      <p class="muted">Vos filtres et vos secteurs tracés, réutilisables en un clic. Le compteur indique les nouvelles annonces depuis votre dernière consultation.</p>
+      <div id="saved-list"></div>
+    </div>
+  </div>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="vendor/leaflet-draw/leaflet.draw.js"></script>
+  <script src="vendor/markercluster/leaflet.markercluster.js"></script>
+  <script src="vendor/turf/turf.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
