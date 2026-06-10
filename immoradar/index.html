@@ -24,13 +24,17 @@
       </div>
     </div>
     <div class="topbar-actions">
+      <button id="btn-refresh" class="btn-ghost" title="Recharger les dernières annonces">
+        🔄 Rafraîchir <span id="new-badge" class="pill" hidden>0</span>
+      </button>
+      <span id="freshness" class="freshness" title="Dernière mise à jour des données"></span>
       <button id="btn-saved-searches" class="btn-ghost" title="Recherches sauvegardées">
         🔖 Recherches <span id="saved-count" class="pill" hidden>0</span>
       </button>
       <button id="btn-favorites" class="btn-ghost" title="Mes favoris">
         ❤️ Favoris <span id="fav-count" class="pill" hidden>0</span>
       </button>
-      <span class="demo-badge" title="Les annonces affichées sont des données fictives de démonstration">MODE DÉMO</span>
+      <span id="data-badge" class="demo-badge" title="Origine des annonces affichées">MODE DÉMO</span>
     </div>
   </header>
 

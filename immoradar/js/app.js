@@ -652,21 +652,119 @@ function debounce(fn, ms) {
 }
 
 // ------------------------------------------------------------------ Démarrage
+const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
+let lastGeneratedAt = null;            // timestamp du dernier JSON chargé
+let knownIds = new Set();              // ids déjà vus (pour détecter les nouveautés)
+
+// Charge data/listings.json. silent = rechargement de fond (ne pas écraser l'UI).
+async function loadData(silent = false) {
+  try {
+    // cache-bust pour toujours obtenir la dernière version sur GitHub Pages
+    const res = await fetch('data/listings.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    // Rien de neuf ? on ne touche pas à l'affichage en cours.
+    if (silent && data.generatedAt && data.generatedAt === lastGeneratedAt) {
+      updateFreshness(data.generatedAt);
+      return;
+    }
+
+    const merged = dedupe(data.listings);
+
+    // Détection des nouvelles annonces depuis le dernier chargement
+    if (silent && knownIds.size) {
+      const fresh = merged.filter((l) => !knownIds.has(l.id));
+      if (fresh.length) showNewBadge(fresh.length);
+    }
+
+    state.merged = merged;
+    knownIds = new Set(merged.map((l) => l.id));
+    lastGeneratedAt = data.generatedAt || null;
+    updateFreshness(lastGeneratedAt);
+    updateDataBadge(data);
+    refresh();
+  } catch (err) {
+    if (!silent) {
+      $('#cards').innerHTML = `<div class="empty">Impossible de charger les annonces (${err.message}).<br>
+        Si vous ouvrez le fichier localement, servez le dossier via un petit serveur web
+        (ex. <code>npx serve immoradar</code>) -- le navigateur bloque <code>fetch</code> en file://.</div>`;
+    }
+  }
+}
+
+// Affiche l'âge des données (« il y a 12 min »)
+function updateFreshness(iso) {
+  const el = $('#freshness');
+  if (!el) return;
+  if (!iso) { el.textContent = ''; return; }
+  const mins = Math.round((Date.now() - new Date(iso)) / 60000);
+  let txt;
+  if (mins < 1) txt = "à l'instant";
+  else if (mins < 60) txt = `il y a ${mins} min`;
+  else if (mins < 1440) txt = `il y a ${Math.round(mins / 60)} h`;
+  else txt = `il y a ${Math.round(mins / 1440)} j`;
+  el.textContent = '🟢 ' + txt;
+}
+
+// Étiquette d'origine des données : DÉMO si pas de vraies sources Centris
+function updateDataBadge(data) {
+  const el = $('#data-badge');
+  if (!el) return;
+  const stats = data.sourceStats;
+  const hasReal = stats && stats.centris > 0;
+  if (hasReal) {
+    el.textContent = `${stats.total} ANNONCES`;
+    el.style.background = '#1d8a4e';
+    el.style.color = '#fff';
+    el.title = `Centris : ${stats.centris} · autres : ${stats.other ?? 0}`;
+  } else {
+    el.textContent = 'MODE DÉMO';
+    el.style.background = '';
+    el.style.color = '';
+    el.title = 'Données fictives de démonstration';
+  }
+}
+
+function showNewBadge(n) {
+  const el = $('#new-badge');
+  if (!el) return;
+  el.hidden = false;
+  el.textContent = '+' + n;
+  $('#btn-refresh').classList.add('has-new');
+}
+function clearNewBadge() {
+  const el = $('#new-badge');
+  if (el) { el.hidden = true; el.textContent = '0'; }
+  $('#btn-refresh').classList.remove('has-new');
+}
+
 async function boot() {
   initMap();
   bindEvents();
   updateFavCount();
   persistSearches();
-  try {
-    const res = await fetch('data/listings.json');
-    const data = await res.json();
-    state.merged = dedupe(data.listings);
-    refresh();
-  } catch (err) {
-    $('#cards').innerHTML = `<div class="empty">Impossible de charger les annonces (${err.message}).<br>
-      Si vous ouvrez le fichier localement, servez le dossier via un petit serveur web
-      (ex. <code>npx serve immoradar</code>) -- le navigateur bloque <code>fetch</code> en file://.</div>`;
-  }
+
+  await loadData(false);
+
+  // Bouton « Rafraîchir » : recharge tout de suite
+  $('#btn-refresh').addEventListener('click', async () => {
+    clearNewBadge();
+    $('#btn-refresh').classList.add('spinning');
+    await loadData(false);
+    setTimeout(() => $('#btn-refresh').classList.remove('spinning'), 600);
+  });
+
+  // Auto-rafraîchissement de fond toutes les 5 min (seulement si l'onglet est visible)
+  setInterval(() => {
+    if (document.visibilityState === 'visible') loadData(true);
+  }, AUTO_REFRESH_MS);
+
+  // Met à jour l'indicateur d'âge chaque minute, et recharge au retour sur l'onglet
+  setInterval(() => updateFreshness(lastGeneratedAt), 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') loadData(true);
+  });
 }
 
 boot();

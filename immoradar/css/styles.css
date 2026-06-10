@@ -68,6 +68,14 @@ body {
   padding: 3px 8px;
   cursor: help;
 }
+.freshness {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+}
+#btn-refresh.has-new { background: var(--accent); border-color: var(--accent); }
+#btn-refresh.spinning { opacity: 0.6; pointer-events: none; }
+#btn-refresh.spinning::before { content: ''; }
 
 /* ---------- Mise en page ---------- */
 .layout {
