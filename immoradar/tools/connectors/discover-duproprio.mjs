@@ -1,56 +1,50 @@
 #!/usr/bin/env node
-/** Diagnostic DuProprio v5 — fiche individuelle + pagination. */
+/** Diagnostic DuProprio v6 — fix parseur + fiche individuelle. */
 const H = { 'User-Agent': 'Mozilla/5.0 Chrome/124', 'Accept-Language': 'fr-CA' };
 
-// 1. Récupère la liste depuis la page de recherche
-const r1 = await fetch('https://duproprio.com/fr/rechercher/liste?search=true', { headers: H });
-const html1 = await r1.text();
-const ldText = [...html1.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)]
-  .map(m => m[1]).find(t => /SearchResultsPage/.test(t));
-const ld = JSON.parse(ldText);
-const items = ld.mainEntity?.itemListElement || [];
-console.log('Items page 1:', items.length);
-const firstUrl = items[0]?.item?.url;
-console.log('1ère URL:', firstUrl);
-
-// 2. Test pagination ?pageNumber=2
-const r2 = await fetch('https://duproprio.com/fr/rechercher/liste?search=true&pageNumber=2', { headers: H });
-const html2 = await r2.text();
-const ld2 = JSON.parse([...html2.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)]
-  .map(m => m[1]).find(t => /SearchResultsPage/.test(t)));
-const items2 = ld2.mainEntity?.itemListElement || [];
-const overlap = items2.filter(x => items.some(y => y.item.url === x.item.url)).length;
-console.log('Items page 2:', items2.length, '| chevauchement avec page 1:', overlap);
-
-// 3. Fiche individuelle — JSON-LD Product ?
-if (firstUrl) {
-  const r3 = await fetch(firstUrl, { headers: H });
-  const html3 = await r3.text();
-  console.log('\nFiche:', r3.status, '| HTML:', html3.length);
-  const lds = [...html3.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)];
-  console.log('JSON-LD sur la fiche:', lds.length);
-  for (const [i, m] of lds.entries()) {
-    try {
-      const j = JSON.parse(m[1]);
-      console.log(`  [${i}] type=${j['@type']} | keys=${Object.keys(j).join(',')}`);
-      if (j['@type'] === 'Product' || j.offers || j.address) {
-        console.log('   PRODUCT:', JSON.stringify(j).slice(0, 1500));
-      }
-    } catch (e) { console.log(`  [${i}] parse fail: ${e.message}`); }
-  }
-  // Régions (pour cibler le Grand Montréal après)
-  const titre = html3.match(/<title>([^<]+)<\/title>/)?.[1];
-  console.log('Title:', titre);
+function parseLD(html, type) {
+  const m = [...html.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)]
+    .map(m => { try { return JSON.parse(m[1]); } catch { return null; } })
+    .filter(Boolean);
+  return type ? m.find(x => x['@type'] === type || (Array.isArray(x['@type']) && x['@type'].includes(type))) : m;
 }
 
-// 4. Filtrer par région : URL avec ?regions[0]=X
-console.log('\n── filtre régional ──');
-for (const id of [10, 8]) {  // 10 = peut-être RMR Montréal ; 8 = test
+// 1. Liste — fix : mainEntity est un tableau
+const r1 = await fetch('https://duproprio.com/fr/rechercher/liste?search=true&pageNumber=1', { headers: H });
+const html1 = await r1.text();
+const ld = parseLD(html1, 'SearchResultsPage');
+const me = Array.isArray(ld.mainEntity) ? ld.mainEntity[0] : ld.mainEntity;
+const items = me?.itemListElement || [];
+console.log('Items page 1:', items.length);
+if (items[0]) console.log('Échantillon item:', JSON.stringify(items[0]));
+const url = items[0]?.item?.url;
+
+// 2. Pagination
+const r2 = await fetch('https://duproprio.com/fr/rechercher/liste?search=true&pageNumber=2', { headers: H });
+const me2 = parseLD(await r2.text(), 'SearchResultsPage');
+const me2It = (Array.isArray(me2?.mainEntity) ? me2.mainEntity[0] : me2?.mainEntity)?.itemListElement || [];
+console.log('Items page 2:', me2It.length, '| URL[0]:', me2It[0]?.item?.url?.slice(-60));
+
+// 3. Fiche individuelle
+if (url) {
+  const r3 = await fetch(url, { headers: H });
+  const html3 = await r3.text();
+  console.log('\nFiche:', r3.status, '| HTML:', html3.length);
+  const lds = parseLD(html3);
+  for (const j of lds) {
+    const t = Array.isArray(j['@type']) ? j['@type'].join(',') : j['@type'];
+    console.log(`  type=${t} | keys=${Object.keys(j).slice(0, 10).join(',')}`);
+    if (j['@type'] === 'Product' || j.offers || j.price || j['@type'] === 'Place' || j['@type'] === 'House') {
+      console.log('  ▶ contenu (1500c):', JSON.stringify(j).slice(0, 1500));
+    }
+  }
+}
+
+// 4. Filtre régional (corrigé)
+console.log('\n── filtres régionaux ──');
+for (const id of [10, 5, 8, 16]) {
   const r = await fetch(`https://duproprio.com/fr/rechercher/liste?search=true&regions%5B0%5D=${id}`, { headers: H });
-  const h = await r.text();
-  const t = [...h.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)]
-    .map(m => m[1]).find(x => /SearchResultsPage/.test(x));
-  if (!t) { console.log(`  regions[0]=${id} → pas de ld`); continue; }
-  const J = JSON.parse(t);
-  console.log(`  regions[0]=${id} → ${J.mainEntity?.itemListElement?.length || 0} items | kw=${J.keywords?.slice(0, 60)}`);
+  const j = parseLD(await r.text(), 'SearchResultsPage');
+  const n = ((Array.isArray(j?.mainEntity) ? j.mainEntity[0] : j?.mainEntity)?.itemListElement || []).length;
+  console.log(`  regions[0]=${id} → ${n} items | kw=${j?.keywords?.slice(0, 60)}`);
 }
