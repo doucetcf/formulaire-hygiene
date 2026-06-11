@@ -51,6 +51,15 @@ async function main() {
   const initial = await page.locator('.property-thumbnail-item').count();
   line(`Cartes initiales : ${initial}`);
 
+  // Ferme la bannière de consentement (didomi) qui bloque les clics
+  await page.evaluate(() => {
+    document.querySelector('#didomi-notice-agree-button')?.click();
+    document.querySelector('#didomi-host')?.remove();
+    document.querySelector('.didomi-popup-backdrop')?.remove();
+  });
+  await page.waitForTimeout(500);
+  line('Bannière de cookies fermée.');
+
   // Nombre total annoncé
   const total = await page.locator('.didomi-notice, .resultSummary, [class*=result]').first().textContent().catch(() => '');
   const totalCount = await page.evaluate(() => {
@@ -69,20 +78,11 @@ async function main() {
   line(`\nContrôles de pagination détectés :`);
   pagerInfo.forEach((p) => line(`  ${p.sel} → ${p.html}`));
 
-  // Tente de cliquer « suivant » (plusieurs sélecteurs)
-  let clicked = false;
-  for (const sel of ['li.next a', 'a[rel=next]', '.pager-next', '.next']) {
-    const el = page.locator(sel).first();
-    if (await el.count() && await el.isVisible().catch(() => false)) {
-      line(`\nClic sur : ${sel}`);
-      await el.click().catch((e) => line('  clic échoué: ' + e.message));
-      clicked = true;
-      break;
-    }
-  }
-  if (!clicked) line('\nAucun bouton « suivant » cliquable — tentative de scroll.');
-  await page.mouse.wheel(0, 4000).catch(() => {});
-  await page.waitForTimeout(4000);
+  // Clique « suivant » (force pour passer outre tout overlay résiduel)
+  line('\nClic sur li.next a …');
+  await page.locator('li.next a').first().click({ force: true, timeout: 8000 })
+    .catch((e) => line('  clic échoué: ' + e.message.split('\n')[0]));
+  await page.waitForTimeout(4500);
 
   const afterCount = await page.locator('.property-thumbnail-item').count();
   line(`Cartes après pagination : ${afterCount}`);
