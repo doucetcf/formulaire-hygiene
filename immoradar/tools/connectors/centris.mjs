@@ -252,15 +252,28 @@ function parseCard(card, region) {
   };
 }
 
-// Décode le cookie property-search-query (base64 + gzip) → objet requête.
-// Fonctionne pour TOUTES les villes, peu importe le type de filtre géographique.
+// Décode le cookie property-search-query (base64 + gzip) et le transforme dans
+// le format PascalCase attendu par GetInscriptions. Le cookie stocke la requête
+// en minuscules (fieldsValues…) ; on la convertit. Fonctionne pour TOUTES les
+// villes, peu importe le type de filtre géographique (CityDistrict, GeographicArea…).
 function decodeSearchQuery(cookies) {
   const m = cookies.match(/property-search-query=([^;]+)/);
   if (!m) return null;
   try {
     const raw = gunzipSync(Buffer.from(decodeURIComponent(m[1]), 'base64')).toString('utf-8');
-    const obj = JSON.parse(raw);
-    return obj.query || (obj.Filters || obj.FieldsValues ? obj : null);
+    const c = JSON.parse(raw);
+    const num = (v) => (/^\d+$/.test(String(v)) ? Number(v) : v);
+    const fields = (c.fieldsValues || c.FieldsValues || []).map((f) => ({
+      fieldId: f.fieldId, value: num(f.value), fieldConditionId: '', valueConditionId: '',
+    }));
+    if (!fields.length) return null;
+    const geo = fields.find((f) => /City|Geographic|Region|Borough/i.test(f.fieldId));
+    return {
+      SearchName: '',
+      UseGeographyShapes: c.useGeographyShapes || c.UseGeographyShapes || 0,
+      Filters: geo ? [{ MatchType: geo.fieldId, Text: '', Id: geo.value }] : [],
+      FieldsValues: fields,
+    };
   } catch (e) { dbg('decode cookie: ' + e.message); return null; }
 }
 
