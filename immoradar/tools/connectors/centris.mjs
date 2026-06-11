@@ -26,36 +26,92 @@ const dbg = (...a) => { if (DEBUG) console.log('[debug]', ...a); };
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const BASE = 'https://www.centris.ca';
-const PAUSE_MS = 1500;
-const JITTER_MS = 800;
+const PAUSE_MS = 1100;
+const JITTER_MS = 700;
 
-/** Villes cibles : Grand Montréal, Laurentides, Lanaudière */
+/**
+ * Villes cibles : Grand Montréal, Laurentides, Lanaudière.
+ * Chaque municipalité = une recherche Centris (20 annonces les plus récentes).
+ * Les slugs invalides retournent 404 et sont ignorés sans casser le run.
+ */
 const CITIES = [
-  // Grand Montréal
+  // ── Île de Montréal + villes liées ──
   { slug: 'montreal',        region: 'Montréal' },
+  { slug: 'westmount',       region: 'Montréal' },
+  { slug: 'mont-royal',      region: 'Montréal' },
+  { slug: 'cote-saint-luc',  region: 'Montréal' },
+  { slug: 'hampstead',       region: 'Montréal' },
+  { slug: 'montreal-ouest',  region: 'Montréal' },
+  { slug: 'dorval',          region: 'Montréal' },
+  { slug: 'pointe-claire',   region: 'Montréal' },
+  { slug: 'dollard-des-ormeaux', region: 'Montréal' },
+  { slug: 'kirkland',        region: 'Montréal' },
+  { slug: 'beaconsfield',    region: 'Montréal' },
+  { slug: 'sainte-anne-de-bellevue', region: 'Montréal' },
+  // ── Laval ──
   { slug: 'laval',           region: 'Laval' },
+  // ── Montérégie (Rive-Sud) ──
   { slug: 'longueuil',       region: 'Montérégie' },
   { slug: 'brossard',        region: 'Montérégie' },
   { slug: 'boucherville',    region: 'Montérégie' },
-  { slug: 'varennes',        region: 'Montérégie' },
   { slug: 'saint-bruno-de-montarville', region: 'Montérégie' },
-  // Lanaudière
+  { slug: 'saint-lambert',   region: 'Montérégie' },
+  { slug: 'sainte-julie',    region: 'Montérégie' },
+  { slug: 'varennes',        region: 'Montérégie' },
+  { slug: 'chambly',         region: 'Montérégie' },
+  { slug: 'carignan',        region: 'Montérégie' },
+  { slug: 'beloeil',         region: 'Montérégie' },
+  { slug: 'mont-saint-hilaire', region: 'Montérégie' },
+  { slug: 'saint-basile-le-grand', region: 'Montérégie' },
+  { slug: 'la-prairie',      region: 'Montérégie' },
+  { slug: 'candiac',         region: 'Montérégie' },
+  { slug: 'saint-constant',  region: 'Montérégie' },
+  { slug: 'sainte-catherine', region: 'Montérégie' },
+  { slug: 'delson',          region: 'Montérégie' },
+  { slug: 'chateauguay',     region: 'Montérégie' },
+  { slug: 'mercier',         region: 'Montérégie' },
+  { slug: 'vaudreuil-dorion', region: 'Montérégie' },
+  { slug: 'saint-jean-sur-richelieu', region: 'Montérégie' },
+  { slug: 'saint-hyacinthe', region: 'Montérégie' },
+  // ── Lanaudière ──
   { slug: 'terrebonne',      region: 'Lanaudière' },
   { slug: 'repentigny',      region: 'Lanaudière' },
   { slug: 'mascouche',       region: 'Lanaudière' },
-  { slug: 'joliette',        region: 'Lanaudière' },
-  { slug: 'rawdon',          region: 'Lanaudière' },
-  { slug: 'saint-charles-borromee', region: 'Lanaudière' },
   { slug: 'l-assomption',    region: 'Lanaudière' },
-  // Laurentides
+  { slug: 'charlemagne',     region: 'Lanaudière' },
+  { slug: 'lavaltrie',       region: 'Lanaudière' },
+  { slug: 'saint-sulpice',   region: 'Lanaudière' },
+  { slug: 'joliette',        region: 'Lanaudière' },
+  { slug: 'notre-dame-des-prairies', region: 'Lanaudière' },
+  { slug: 'saint-charles-borromee', region: 'Lanaudière' },
+  { slug: 'rawdon',          region: 'Lanaudière' },
+  { slug: 'saint-lin-laurentides', region: 'Lanaudière' },
+  { slug: 'sainte-julienne', region: 'Lanaudière' },
+  { slug: 'saint-felix-de-valois', region: 'Lanaudière' },
+  { slug: 'chertsey',        region: 'Lanaudière' },
+  { slug: 'saint-donat',     region: 'Lanaudière' },
+  { slug: 'berthierville',   region: 'Lanaudière' },
+  // ── Laurentides ──
+  { slug: 'saint-jerome',    region: 'Laurentides' },
   { slug: 'blainville',      region: 'Laurentides' },
   { slug: 'mirabel',         region: 'Laurentides' },
-  { slug: 'saint-jerome',    region: 'Laurentides' },
-  { slug: 'sainte-adele',    region: 'Laurentides' },
+  { slug: 'boisbriand',      region: 'Laurentides' },
   { slug: 'sainte-therese',  region: 'Laurentides' },
-  { slug: 'mont-tremblant',  region: 'Laurentides' },
+  { slug: 'rosemere',        region: 'Laurentides' },
+  { slug: 'lorraine',        region: 'Laurentides' },
+  { slug: 'saint-eustache',  region: 'Laurentides' },
+  { slug: 'deux-montagnes',  region: 'Laurentides' },
+  { slug: 'sainte-marthe-sur-le-lac', region: 'Laurentides' },
+  { slug: 'saint-colomban',  region: 'Laurentides' },
+  { slug: 'prevost',         region: 'Laurentides' },
+  { slug: 'sainte-sophie',   region: 'Laurentides' },
+  { slug: 'sainte-adele',    region: 'Laurentides' },
   { slug: 'saint-sauveur',   region: 'Laurentides' },
   { slug: 'morin-heights',   region: 'Laurentides' },
+  { slug: 'sainte-agathe-des-monts', region: 'Laurentides' },
+  { slug: 'val-david',       region: 'Laurentides' },
+  { slug: 'mont-tremblant',  region: 'Laurentides' },
+  { slug: 'lachute',         region: 'Laurentides' },
 ];
 
 // Catégorie Centris (texte) → type interne ImmoRadar
