@@ -15,6 +15,7 @@
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', '..', 'data');
@@ -251,28 +252,23 @@ function parseCard(card, region) {
   };
 }
 
-// Extrait l'Id numérique de la ville (CityDistrict) de la page de recherche.
-function extractCityId(html) {
-  return html.match(/CityDistrict["'][^]{0,40}?value["']?\s*[:=]\s*["']?(\d+)/i)?.[1]
-    || html.match(/["']?Id["']?\s*[:=]\s*(\d+)[^}]{0,40}CityDistrict/i)?.[1]
-    || html.match(/CityDistrict[^}]{0,80}?Id["']?\s*[:=]\s*(\d+)/i)?.[1]
-    || null;
+// Décode le cookie property-search-query (base64 + gzip) → objet requête.
+// Fonctionne pour TOUTES les villes, peu importe le type de filtre géographique.
+function decodeSearchQuery(cookies) {
+  const m = cookies.match(/property-search-query=([^;]+)/);
+  if (!m) return null;
+  try {
+    const raw = gunzipSync(Buffer.from(decodeURIComponent(m[1]), 'base64')).toString('utf-8');
+    const obj = JSON.parse(raw);
+    return obj.query || (obj.Filters || obj.FieldsValues ? obj : null);
+  } catch (e) { dbg('decode cookie: ' + e.message); return null; }
 }
 
-// Récupère une page de résultats supplémentaire via l'API interne GetInscriptions.
-async function getInscriptionsPage(meta, cityId, pageNum, cookies) {
+// Récupère une page de résultats via l'API interne GetInscriptions.
+async function getInscriptionsPage(meta, query, pageNum, cookies) {
   const body = {
     mode: 'Result', searchView: 'Thumbnail', sortSeed: 0, sort: 'None',
-    pageSize: 20, page: pageNum,
-    query: {
-      SearchName: '', UseGeographyShapes: 0,
-      Filters: [{ MatchType: 'CityDistrict', Text: meta.slug, Id: Number(cityId) }],
-      FieldsValues: [
-        { fieldId: 'CityDistrict', value: Number(cityId), fieldConditionId: '', valueConditionId: '' },
-        { fieldId: 'Category', value: 'Residential', fieldConditionId: '', valueConditionId: '' },
-        { fieldId: 'SellingType', value: 'Sale', fieldConditionId: '', valueConditionId: '' },
-      ],
-    },
+    pageSize: 20, page: pageNum, query,
   };
   const res = await fetch(`${BASE}/Property/GetInscriptions`, {
     method: 'POST',
@@ -314,21 +310,21 @@ async function fetchCity(meta) {
     };
 
     addCards(html);                         // page 1 (embarquée dans le HTML)
-    const cityId = extractCityId(html);
+    const query = decodeSearchQuery(cookies);
 
     // Pages suivantes via l'API GetInscriptions (s'arrête quand une page
     // ramène moins de 20 annonces, ou à la limite MAX_PAGES).
-    if (cityId) {
+    if (query) {
       for (let page = 2; page <= MAX_PAGES; page++) {
         await sleep(550 + Math.random() * 450);
         let added;
         try {
-          const pageHtml = await getInscriptionsPage(meta, cityId, page, cookies);
+          const pageHtml = await getInscriptionsPage(meta, query, page, cookies);
           added = addCards(pageHtml);
         } catch (e) { dbg(`${meta.slug} ${e.message}`); break; }
         if (added < 20) break;              // dernière page atteinte
       }
-    } else dbg(`${meta.slug} : Id ville introuvable, page 1 seulement`);
+    } else dbg(`${meta.slug} : requête introuvable, page 1 seulement`);
 
     console.log(`   ✔ ${listings.length} annonces`);
     return listings;
