@@ -15,6 +15,7 @@
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', '..', 'data');
@@ -23,6 +24,8 @@ const OUT = join(DATA_DIR, 'listings.json');
 const args = process.argv.slice(2);
 const DEBUG = args.includes('--debug');
 const dbg = (...a) => { if (DEBUG) console.log('[debug]', ...a); };
+// Pages max par ville (10 × 20 = 200 annonces/ville). Override : --max-pages=N
+const MAX_PAGES = Number(args.find((a) => a.startsWith('--max-pages='))?.split('=')[1]) || 10;
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const BASE = 'https://www.centris.ca';
@@ -244,9 +247,55 @@ function parseCard(card, region) {
     openHouse: /visite libre/i.test(card),
     repossession: /reprise|saisie/i.test(card),
     newConstruction: /construction neuve|neuf|nouveau projet/i.test(catRaw),
-    publishedAt: new Date().toISOString().slice(0, 10),
+    publishedAt: null,   // non disponible sur la fiche de résultats Centris
     description: '',
   };
+}
+
+// Décode le cookie property-search-query (base64 + gzip) et le transforme dans
+// le format PascalCase attendu par GetInscriptions. Le cookie stocke la requête
+// en minuscules (fieldsValues…) ; on la convertit. Fonctionne pour TOUTES les
+// villes, peu importe le type de filtre géographique (CityDistrict, GeographicArea…).
+function decodeSearchQuery(cookies) {
+  const m = cookies.match(/property-search-query=([^;]+)/);
+  if (!m) return null;
+  try {
+    const raw = gunzipSync(Buffer.from(decodeURIComponent(m[1]), 'base64')).toString('utf-8');
+    const c = JSON.parse(raw);
+    const num = (v) => (/^\d+$/.test(String(v)) ? Number(v) : v);
+    const fields = (c.fieldsValues || c.FieldsValues || []).map((f) => ({
+      fieldId: f.fieldId, value: num(f.value), fieldConditionId: '', valueConditionId: '',
+    }));
+    if (!fields.length) return null;
+    const geo = fields.find((f) => /City|Geographic|Region|Borough/i.test(f.fieldId));
+    return {
+      SearchName: '',
+      UseGeographyShapes: c.useGeographyShapes || c.UseGeographyShapes || 0,
+      Filters: geo ? [{ MatchType: geo.fieldId, Text: '', Id: geo.value }] : [],
+      FieldsValues: fields,
+    };
+  } catch (e) { dbg('decode cookie: ' + e.message); return null; }
+}
+
+// Récupère une page de résultats via l'API interne GetInscriptions.
+async function getInscriptionsPage(meta, query, pageNum, cookies) {
+  const body = {
+    mode: 'Result', searchView: 'Thumbnail', sortSeed: 0, sort: 'None',
+    pageSize: 20, page: pageNum, query,
+  };
+  const res = await fetch(`${BASE}/Property/GetInscriptions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest', 'Accept': '*/*',
+      'Cookie': cookies, 'Referer': `${BASE}/fr/propriete~a-vendre~${meta.slug}`,
+      'Origin': BASE, 'User-Agent': UA,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`page ${pageNum} HTTP ${res.status}`);
+  const j = await res.json();
+  return j?.d?.Result?.html || j?.d?.Result?.Html || '';
 }
 
 // ------------------------------------------------------------------ Une ville
@@ -259,15 +308,37 @@ async function fetchCity(meta) {
       redirect: 'follow',
     });
     if (!res.ok) { console.log(`   ✗ HTTP ${res.status}`); return []; }
+    const cookies = (res.headers.getSetCookie?.() ?? []).map((c) => c.split(';')[0]).join('; ');
     const html = await res.text();
-    const cards = splitCards(html);
-    dbg(`${cards.length} cartes brutes`);
 
     const listings = [];
-    for (const card of cards) {
-      const l = parseCard(card, meta.region);
-      if (l) listings.push(l);
-    }
+    const seen = new Set();
+    const addCards = (rawHtml) => {
+      let n = 0;
+      for (const card of splitCards(rawHtml)) {
+        const l = parseCard(card, meta.region);
+        if (l && !seen.has(l.sourceId)) { seen.add(l.sourceId); listings.push(l); n++; }
+      }
+      return n;
+    };
+
+    addCards(html);                         // page 1 (embarquée dans le HTML)
+    const query = decodeSearchQuery(cookies);
+
+    // Pages suivantes via l'API GetInscriptions (s'arrête quand une page
+    // ramène moins de 20 annonces, ou à la limite MAX_PAGES).
+    if (query) {
+      for (let page = 2; page <= MAX_PAGES; page++) {
+        await sleep(550 + Math.random() * 450);
+        let added;
+        try {
+          const pageHtml = await getInscriptionsPage(meta, query, page, cookies);
+          added = addCards(pageHtml);
+        } catch (e) { dbg(`${meta.slug} ${e.message}`); break; }
+        if (added < 20) break;              // dernière page atteinte
+      }
+    } else dbg(`${meta.slug} : requête introuvable, page 1 seulement`);
+
     console.log(`   ✔ ${listings.length} annonces`);
     return listings;
   } catch (err) {
