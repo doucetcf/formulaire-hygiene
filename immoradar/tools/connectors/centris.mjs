@@ -221,30 +221,10 @@ async function fetchCity(meta) {
   }
 }
 
-// ------------------------------------------------------------------ Déduplication
-function normalize(s) {
-  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-}
-function dedupeSources(raw) {
-  const map = new Map();
-  for (const l of raw) {
-    const key = `${normalize(l.address)}|${normalize(l.city)}`;
-    if (!map.has(key)) {
-      const { source, sourceId, url, photos, photoUrl, ...rest } = l;
-      map.set(key, { ...rest, sources: [{ source, sourceId, url, price: l.price }], photos: photos || [], photoUrl });
-    } else {
-      const m = map.get(key);
-      if (!m.sources.some((s) => s.sourceId === l.sourceId)) {
-        m.sources.push({ source: l.source, sourceId: l.sourceId, url: l.url, price: l.price });
-      }
-      m.price = Math.min(m.price, l.price);
-      if (l.photoUrl && !m.photoUrl) { m.photoUrl = l.photoUrl; m.photos = l.photos; }
-    }
-  }
-  return [...map.values()];
-}
-
 // ------------------------------------------------------------------ Main
+// IMPORTANT : on écrit des annonces au format BRUT (une entrée par source,
+// champs `source`/`sourceId`/`url` à plat). C'est le frontend qui fusionne
+// les doublons multi-plateformes — exactement comme avec les données démo.
 async function main() {
   console.log('🏠 ImmoRadar — Connecteur Centris');
   console.log(`   ${CITIES.length} villes (Grand Montréal, Lanaudière, Laurentides)`);
@@ -255,38 +235,37 @@ async function main() {
     if (CITIES.indexOf(city) < CITIES.length - 1) await pause();
   }
 
-  console.log(`\n📊 Total brut : ${allRaw.length} annonces Centris`);
-  const merged = dedupeSources(allRaw);
-  console.log(`📊 Après fusion : ${merged.length} propriétés`);
+  // Déduplication par sourceId (une même annonce peut apparaître dans 2 villes)
+  const byId = new Map();
+  for (const l of allRaw) if (!byId.has(l.sourceId)) byId.set(l.sourceId, l);
+  const centris = [...byId.values()];
+  console.log(`\n📊 ${centris.length} annonces Centris uniques (sur ${allRaw.length} brutes)`);
 
-  // Conserve les annonces d'autres sources (DuProprio/Ubee), pas la démo
-  let preserved = [];
-  if (existsSync(OUT)) {
-    try {
-      const prev = JSON.parse(readFileSync(OUT, 'utf-8'));
-      const wasRealCentris = prev.sourceStats?.centris > 0;
-      preserved = (prev.listings || []).filter((l) =>
-        l.sources?.length && !l.sources.some((s) => s.source === 'centris'));
-      if (!wasRealCentris) preserved = []; // l'ancien fichier était de la démo → on jette
-      console.log(`📦 Annonces conservées d'autres sources : ${preserved.length}`);
-    } catch { /* ignore */ }
-  }
-
-  const final = [...merged, ...preserved];
-  const output = {
-    generatedAt: new Date().toISOString(),
-    sourceStats: { centris: merged.length, other: preserved.length, total: final.length },
-    listings: final,
-  };
-
-  if (!merged.length) {
+  if (!centris.length) {
     console.error('\n⚠️  Aucune annonce Centris récupérée — fichier NON écrasé.');
     process.exit(1);
   }
 
+  // Conserve les annonces BRUTES d'autres sources (DuProprio/Ubee à venir)
+  let preserved = [];
+  if (existsSync(OUT)) {
+    try {
+      const prev = JSON.parse(readFileSync(OUT, 'utf-8'));
+      preserved = (prev.listings || []).filter((l) => l.source && l.source !== 'centris');
+      if (preserved.length) console.log(`📦 Annonces d'autres sources conservées : ${preserved.length}`);
+    } catch { /* ignore */ }
+  }
+
+  const final = [...centris, ...preserved];
+  const output = {
+    generatedAt: new Date().toISOString(),
+    sourceStats: { centris: centris.length, other: preserved.length, total: final.length },
+    listings: final,
+  };
+
   writeFileSync(OUT, JSON.stringify(output, null, 1));
   console.log(`\n✅ ${OUT}`);
-  console.log(`   ${final.length} propriétés au total`);
+  console.log(`   ${final.length} annonces au total`);
 }
 
 main().catch((err) => { console.error('Erreur fatale:', err); process.exit(1); });

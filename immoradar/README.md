@@ -5,9 +5,10 @@ Moteur de recherche immobilier personnalisé qui combine les annonces de
 « Centris 2.0 » avec en prime la fusion automatique des propriétés listées
 sur plusieurs plateformes.
 
-> ⚠️ **Mode démo** : les 360 propriétés affichées sont des données fictives
-> générées par `tools/generate-listings.mjs`. L'architecture est prête à
-> recevoir de vrais connecteurs (voir la feuille de route plus bas).
+> ✅ **Données réelles Centris** : un robot (GitHub Actions) récupère toutes
+> les 2 heures les annonces réelles de Centris pour le Grand Montréal, les
+> Laurentides et Lanaudière (prix, photos, coordonnées GPS, liens d'origine).
+> Voir `tools/connectors/centris.mjs`. DuProprio et Ubee viendront s'ajouter.
 
 ## ✨ Fonctionnalités
 
