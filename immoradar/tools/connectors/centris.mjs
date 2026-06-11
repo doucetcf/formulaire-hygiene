@@ -23,6 +23,8 @@ const OUT = join(DATA_DIR, 'listings.json');
 const args = process.argv.slice(2);
 const DEBUG = args.includes('--debug');
 const dbg = (...a) => { if (DEBUG) console.log('[debug]', ...a); };
+// Pages max par ville (10 × 20 = 200 annonces/ville). Override : --max-pages=N
+const MAX_PAGES = Number(args.find((a) => a.startsWith('--max-pages='))?.split('=')[1]) || 10;
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const BASE = 'https://www.centris.ca';
@@ -249,6 +251,44 @@ function parseCard(card, region) {
   };
 }
 
+// Extrait l'Id numérique de la ville (CityDistrict) de la page de recherche.
+function extractCityId(html) {
+  return html.match(/CityDistrict["'][^]{0,40}?value["']?\s*[:=]\s*["']?(\d+)/i)?.[1]
+    || html.match(/["']?Id["']?\s*[:=]\s*(\d+)[^}]{0,40}CityDistrict/i)?.[1]
+    || html.match(/CityDistrict[^}]{0,80}?Id["']?\s*[:=]\s*(\d+)/i)?.[1]
+    || null;
+}
+
+// Récupère une page de résultats supplémentaire via l'API interne GetInscriptions.
+async function getInscriptionsPage(meta, cityId, pageNum, cookies) {
+  const body = {
+    mode: 'Result', searchView: 'Thumbnail', sortSeed: 0, sort: 'None',
+    pageSize: 20, page: pageNum,
+    query: {
+      SearchName: '', UseGeographyShapes: 0,
+      Filters: [{ MatchType: 'CityDistrict', Text: meta.slug, Id: Number(cityId) }],
+      FieldsValues: [
+        { fieldId: 'CityDistrict', value: Number(cityId), fieldConditionId: '', valueConditionId: '' },
+        { fieldId: 'Category', value: 'Residential', fieldConditionId: '', valueConditionId: '' },
+        { fieldId: 'SellingType', value: 'Sale', fieldConditionId: '', valueConditionId: '' },
+      ],
+    },
+  };
+  const res = await fetch(`${BASE}/Property/GetInscriptions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest', 'Accept': '*/*',
+      'Cookie': cookies, 'Referer': `${BASE}/fr/propriete~a-vendre~${meta.slug}`,
+      'Origin': BASE, 'User-Agent': UA,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`page ${pageNum} HTTP ${res.status}`);
+  const j = await res.json();
+  return j?.d?.Result?.html || j?.d?.Result?.Html || '';
+}
+
 // ------------------------------------------------------------------ Une ville
 async function fetchCity(meta) {
   const url = `${BASE}/fr/propriete~a-vendre~${meta.slug}`;
@@ -259,15 +299,37 @@ async function fetchCity(meta) {
       redirect: 'follow',
     });
     if (!res.ok) { console.log(`   ✗ HTTP ${res.status}`); return []; }
+    const cookies = (res.headers.getSetCookie?.() ?? []).map((c) => c.split(';')[0]).join('; ');
     const html = await res.text();
-    const cards = splitCards(html);
-    dbg(`${cards.length} cartes brutes`);
 
     const listings = [];
-    for (const card of cards) {
-      const l = parseCard(card, meta.region);
-      if (l) listings.push(l);
-    }
+    const seen = new Set();
+    const addCards = (rawHtml) => {
+      let n = 0;
+      for (const card of splitCards(rawHtml)) {
+        const l = parseCard(card, meta.region);
+        if (l && !seen.has(l.sourceId)) { seen.add(l.sourceId); listings.push(l); n++; }
+      }
+      return n;
+    };
+
+    addCards(html);                         // page 1 (embarquée dans le HTML)
+    const cityId = extractCityId(html);
+
+    // Pages suivantes via l'API GetInscriptions (s'arrête quand une page
+    // ramène moins de 20 annonces, ou à la limite MAX_PAGES).
+    if (cityId) {
+      for (let page = 2; page <= MAX_PAGES; page++) {
+        await sleep(550 + Math.random() * 450);
+        let added;
+        try {
+          const pageHtml = await getInscriptionsPage(meta, cityId, page, cookies);
+          added = addCards(pageHtml);
+        } catch (e) { dbg(`${meta.slug} ${e.message}`); break; }
+        if (added < 20) break;              // dernière page atteinte
+      }
+    } else dbg(`${meta.slug} : Id ville introuvable, page 1 seulement`);
+
     console.log(`   ✔ ${listings.length} annonces`);
     return listings;
   } catch (err) {

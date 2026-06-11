@@ -36,9 +36,6 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Diagnostic pagination fetch (temporaire)
-        run: node immoradar/tools/connectors/discover-centris.mjs || true
-
       - name: Récupérer les annonces Centris
         run: node immoradar/tools/connectors/centris.mjs
 
