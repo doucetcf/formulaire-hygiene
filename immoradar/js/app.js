@@ -31,10 +31,17 @@ const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 const fmtPrice = (n) => n.toLocaleString('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 });
 const fmtNum = (n) => n.toLocaleString('fr-CA');
 
+// La date de mise en vente n'est pas fournie sur les fiches de résultats
+// Centris. daysOnMarket renvoie null quand on ne la connaît pas.
 function daysOnMarket(l) {
-  return Math.floor((state.today - new Date(l.publishedAt + 'T12:00:00')) / 86400000);
+  if (!l.publishedAt) return null;
+  const d = Math.floor((state.today - new Date(l.publishedAt + 'T12:00:00')) / 86400000);
+  return d < 0 ? 0 : d;
 }
-function isNew(l) { return daysOnMarket(l) <= NEW_DAYS; }
+function isNew(l) {
+  const d = daysOnMarket(l);
+  return d !== null && d <= NEW_DAYS;
+}
 
 // Couleur de pseudo-photo déterministe à partir de l'identifiant
 function heroStyle(l) {
@@ -193,7 +200,7 @@ function matches(l, f, shapes) {
   if (f.yearMin && (!l.yearBuilt || l.yearBuilt < f.yearMin)) return false;
   if (f.yearMax !== Infinity && l.yearBuilt > f.yearMax) return false;
   if (f.revenueMin && l.revenue < f.revenueMin) return false;
-  if (daysOnMarket(l) > f.domMax) return false;
+  if (f.domMax !== Infinity) { const d = daysOnMarket(l); if (d === null || d > f.domMax) return false; }
 
   for (const feat of f.features) {
     if (feat === 'parking') { if (!l.features.parkingSpots) return false; }
@@ -220,7 +227,7 @@ function applySort(list) {
     case 'price-desc': s.sort((a, b) => b.price - a.price); break;
     case 'area-desc': s.sort((a, b) => b.livingAreaSqft - a.livingAreaSqft); break;
     case 'lot-desc': s.sort((a, b) => b.lotAreaSqm - a.lotAreaSqm); break;
-    default: s.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+    default: s.sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
   }
   return s;
 }
@@ -293,7 +300,7 @@ function renderCards(list) {
           ${l.openHouse ? '<span class="badge-soft">Visite libre</span>' : ''}
           ${l.repossession ? '<span class="badge-soft">Reprise</span>' : ''}
           ${l.features.waterfront ? '<span class="badge-soft">Bord de l\'eau</span>' : ''}
-          <span class="badge-soft">${daysOnMarket(l)} j sur le marché</span>
+          ${daysOnMarket(l) !== null ? `<span class="badge-soft">${daysOnMarket(l)} j sur le marché</span>` : ''}
         </div>
       </div>
       <button class="fav-btn ${state.favorites.has(l.id) ? 'on' : ''}" data-fav="${l.id}" title="Ajouter aux favoris">
@@ -372,8 +379,8 @@ function openListing(id) {
       ${l.yearBuilt ? `<div><b>Année</b>${l.yearBuilt}</div>` : ''}
       ${l.units ? `<div><b>Logements</b>${l.units}</div>` : ''}
       ${l.revenue ? `<div><b>Revenus annuels</b>${fmtPrice(l.revenue)}</div>` : ''}
-      <div><b>Sur le marché</b>${daysOnMarket(l)} jour(s)</div>
-      <div><b>Publication</b>${l.publishedAt}</div>
+      ${daysOnMarket(l) !== null ? `<div><b>Sur le marché</b>${daysOnMarket(l)} jour(s)</div>` : ''}
+      ${l.publishedAt ? `<div><b>Publication</b>${l.publishedAt}</div>` : ''}
     </div>
 
     ${tags.length ? `<div class="feature-tags">${tags.map((t) => `<span class="badge-soft">${t}</span>`).join('')}</div>` : ''}

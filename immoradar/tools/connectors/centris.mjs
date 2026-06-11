@@ -244,7 +244,7 @@ function parseCard(card, region) {
     openHouse: /visite libre/i.test(card),
     repossession: /reprise|saisie/i.test(card),
     newConstruction: /construction neuve|neuf|nouveau projet/i.test(catRaw),
-    publishedAt: new Date().toISOString().slice(0, 10),
+    publishedAt: null,   // non disponible sur la fiche de résultats Centris
     description: '',
   };
 }
