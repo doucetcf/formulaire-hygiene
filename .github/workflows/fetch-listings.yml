@@ -37,9 +37,10 @@ jobs:
           node-version: '22'
 
       - name: Diagnostic DuProprio (temporaire)
-        run: node immoradar/tools/connectors/discover-duproprio.mjs || true
+        run: node immoradar/tools/connectors/discover-duproprio.mjs
 
       - name: Récupérer les annonces Centris
+        if: false   # désactivé pendant le diagnostic DuProprio
         run: node immoradar/tools/connectors/centris.mjs
 
       - name: Vérifier si les données ont changé
