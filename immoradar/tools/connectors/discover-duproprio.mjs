@@ -1,33 +1,56 @@
 #!/usr/bin/env node
-/** Diagnostic DuProprio v4 — dump du JSON-LD SearchResultsPage. */
-const r = await fetch('https://duproprio.com/fr/rechercher/liste?search=true', {
-  headers: { 'User-Agent': 'Mozilla/5.0 Chrome/124', 'Accept-Language': 'fr-CA' },
-});
-const html = await r.text();
-const scripts = [...html.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)];
-console.log('JSON-LD trouvés:', scripts.length);
-scripts.forEach((s, i) => {
-  console.log(`\n── JSON-LD [${i}] (${s[1].length} car.) ──`);
-  try {
-    const j = JSON.parse(s[1]);
-    // Si c'est trop gros, juste les clés et un résumé
-    if (s[1].length > 3000) {
-      console.log('Type:', j['@type']);
-      console.log('Clés top niveau:', Object.keys(j));
-      if (j.mainEntity) console.log('  mainEntity:', JSON.stringify(j.mainEntity).slice(0, 500));
-      if (j.offers) {
-        console.log('  offers (type=' + j.offers['@type'] + '):');
-        console.log('    keys:', Object.keys(j.offers));
-        if (Array.isArray(j.offers.offers)) console.log('    offers.offers.length:', j.offers.offers.length);
-        else if (j.offers.offers) console.log('    offers.offers (200c):', JSON.stringify(j.offers.offers).slice(0, 500));
-      }
-      if (j.itemListElement) console.log('  itemListElement[0]:', JSON.stringify(j.itemListElement[0]).slice(0, 500));
-    } else {
-      console.log(JSON.stringify(j, null, 1).slice(0, 2500));
-    }
-  } catch (e) { console.log('Parse fail:', e.message, '| brut:', s[1].slice(0, 300)); }
-});
+/** Diagnostic DuProprio v5 — fiche individuelle + pagination. */
+const H = { 'User-Agent': 'Mozilla/5.0 Chrome/124', 'Accept-Language': 'fr-CA' };
 
-// Aussi : meta csrf-token (pour les requêtes API)
-const csrf = html.match(/<meta[^>]+name="csrf-token"[^>]+content="([^"]+)"/)?.[1];
-console.log('\nmeta csrf-token:', csrf ? csrf.slice(0, 40) + '...' : '∅');
+// 1. Récupère la liste depuis la page de recherche
+const r1 = await fetch('https://duproprio.com/fr/rechercher/liste?search=true', { headers: H });
+const html1 = await r1.text();
+const ldText = [...html1.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)]
+  .map(m => m[1]).find(t => /SearchResultsPage/.test(t));
+const ld = JSON.parse(ldText);
+const items = ld.mainEntity?.itemListElement || [];
+console.log('Items page 1:', items.length);
+const firstUrl = items[0]?.item?.url;
+console.log('1ère URL:', firstUrl);
+
+// 2. Test pagination ?pageNumber=2
+const r2 = await fetch('https://duproprio.com/fr/rechercher/liste?search=true&pageNumber=2', { headers: H });
+const html2 = await r2.text();
+const ld2 = JSON.parse([...html2.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)]
+  .map(m => m[1]).find(t => /SearchResultsPage/.test(t)));
+const items2 = ld2.mainEntity?.itemListElement || [];
+const overlap = items2.filter(x => items.some(y => y.item.url === x.item.url)).length;
+console.log('Items page 2:', items2.length, '| chevauchement avec page 1:', overlap);
+
+// 3. Fiche individuelle — JSON-LD Product ?
+if (firstUrl) {
+  const r3 = await fetch(firstUrl, { headers: H });
+  const html3 = await r3.text();
+  console.log('\nFiche:', r3.status, '| HTML:', html3.length);
+  const lds = [...html3.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)];
+  console.log('JSON-LD sur la fiche:', lds.length);
+  for (const [i, m] of lds.entries()) {
+    try {
+      const j = JSON.parse(m[1]);
+      console.log(`  [${i}] type=${j['@type']} | keys=${Object.keys(j).join(',')}`);
+      if (j['@type'] === 'Product' || j.offers || j.address) {
+        console.log('   PRODUCT:', JSON.stringify(j).slice(0, 1500));
+      }
+    } catch (e) { console.log(`  [${i}] parse fail: ${e.message}`); }
+  }
+  // Régions (pour cibler le Grand Montréal après)
+  const titre = html3.match(/<title>([^<]+)<\/title>/)?.[1];
+  console.log('Title:', titre);
+}
+
+// 4. Filtrer par région : URL avec ?regions[0]=X
+console.log('\n── filtre régional ──');
+for (const id of [10, 8]) {  // 10 = peut-être RMR Montréal ; 8 = test
+  const r = await fetch(`https://duproprio.com/fr/rechercher/liste?search=true&regions%5B0%5D=${id}`, { headers: H });
+  const h = await r.text();
+  const t = [...h.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)]
+    .map(m => m[1]).find(x => /SearchResultsPage/.test(x));
+  if (!t) { console.log(`  regions[0]=${id} → pas de ld`); continue; }
+  const J = JSON.parse(t);
+  console.log(`  regions[0]=${id} → ${J.mainEntity?.itemListElement?.length || 0} items | kw=${J.keywords?.slice(0, 60)}`);
+}
