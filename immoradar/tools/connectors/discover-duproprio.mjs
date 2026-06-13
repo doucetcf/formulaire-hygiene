@@ -1,46 +1,41 @@
 #!/usr/bin/env node
-/** Diagnostic DuProprio Playwright — capture la vraie API XHR de React. */
-import { chromium } from 'playwright';
+/** Diagnostic DuProprio — schéma featured-homes + recherche des endpoints. */
+const UA = 'Mozilla/5.0 Chrome/124';
+const H = { 'User-Agent': UA, 'Accept-Language': 'fr-CA', 'Accept': 'application/json' };
 
-const URL = 'https://duproprio.com/fr/rechercher/liste?search=true';
-const browser = await chromium.launch({ args: ['--no-sandbox'] });
-const page = await browser.newPage({
-  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
-  locale: 'fr-CA',
-});
+// cookies
+const pg = await fetch('https://duproprio.com/fr/rechercher/liste?search=true', { headers: { ...H, Accept: 'text/html' } });
+const cookies = (pg.headers.getSetCookie?.() ?? []).map(c => c.split(';')[0]).join('; ');
+const HH = { ...H, Cookie: cookies };
 
-const hits = [];
-page.on('response', async (res) => {
-  const u = res.url();
-  const ct = res.headers()['content-type'] || '';
-  if (!/json/.test(ct)) return;
-  if (/duproprio\.com/.test(u) === false) return;
-  let body = '';
-  try { body = await res.text(); } catch { return; }
-  // Heuristique : réponse qui ressemble à des annonces
-  const score = (body.match(/price|prix|civicNumber|latitude|bedroom|chambre|listingId|propertyId/gi) || []).length;
-  if (score >= 3) {
-    hits.push({ url: u, method: res.request().method(), status: res.status(), len: body.length, score,
-      reqBody: res.request().postData()?.slice(0, 300), sample: body.slice(0, 600) });
-  }
-});
-
-console.log('Navigation…');
-await page.goto(URL, { waitUntil: 'networkidle', timeout: 60000 }).catch(e => console.log('goto:', e.message));
-await page.waitForTimeout(4000);
-// fermer le consentement et re-déclencher
-await page.evaluate(() => { document.querySelector('#didomi-host')?.remove(); }).catch(() => {});
-await page.waitForTimeout(2000);
-
-console.log('\n=== Requêtes JSON candidates (' + hits.length + ') ===');
-for (const h of hits.slice(0, 6)) {
-  console.log(`\n▶ ${h.method} ${h.url}`);
-  console.log(`  status=${h.status} len=${h.len} score=${h.score}`);
-  if (h.reqBody) console.log(`  reqBody: ${h.reqBody}`);
-  console.log(`  sample: ${h.sample.replace(/\s+/g, ' ')}`);
+// 1. Schéma complet d'une annonce featured-homes
+const f = await fetch('https://duproprio.com/fr/api-proxy/featured-homes?province=qc&page%5Bsize%5D=2', { headers: HH });
+console.log('featured-homes:', f.status);
+const fj = await f.json();
+if (fj.listings?.[0]) {
+  const l = fj.listings[0];
+  console.log('Clés annonce:', Object.keys(l).join(', '));
+  console.log('Échantillon complet (1 annonce, 1200c):');
+  console.log(JSON.stringify(l).slice(0, 1200));
+  console.log('meta/pagination:', JSON.stringify(fj.meta || fj.links || {}).slice(0, 300));
 }
-if (!hits.length) {
-  console.log('Aucune. Toutes les requêtes JSON DuProprio vues :');
-  // fallback : recharger en listant tout
+
+// 2. Sonder les endpoints de recherche plausibles
+console.log('\n=== endpoints candidats ===');
+const eps = [
+  'search?province=qc&page%5Bsize%5D=5',
+  'listings?province=qc&page%5Bsize%5D=5',
+  'properties?province=qc&page%5Bsize%5D=5',
+  'for-sale?province=qc&page%5Bsize%5D=5',
+  'homes?province=qc&page%5Bsize%5D=5',
+  'search-results?province=qc&page%5Bsize%5D=5',
+  'listings/search?province=qc&page%5Bsize%5D=5',
+];
+for (const ep of eps) {
+  try {
+    const r = await fetch('https://duproprio.com/fr/api-proxy/' + ep, { headers: HH });
+    const t = await r.text();
+    let n = 0; try { const j = JSON.parse(t); n = (j.listings || j.data || []).length; } catch {}
+    console.log(`  ${ep.split('?')[0].padEnd(18)} → ${r.status} (${t.length}c, ${n} annonces)`);
+  } catch (e) { console.log(`  ${ep} → err ${e.message}`); }
 }
-await browser.close();
