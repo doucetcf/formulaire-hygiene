@@ -115,6 +115,34 @@ const CITIES = [
   { slug: 'val-david',       region: 'Laurentides' },
   { slug: 'mont-tremblant',  region: 'Laurentides' },
   { slug: 'lachute',         region: 'Laurentides' },
+  // ── Laurentides — ajouts (couvre les secteurs Saint-Jérôme/Pays-d'en-Haut) ──
+  { slug: 'saint-hippolyte', region: 'Laurentides' },
+  { slug: 'sainte-anne-des-lacs', region: 'Laurentides' },
+  { slug: 'piedmont',        region: 'Laurentides' },
+  { slug: 'val-morin',       region: 'Laurentides' },
+  { slug: 'sainte-marguerite-du-lac-masson', region: 'Laurentides' },
+  { slug: 'esterel',         region: 'Laurentides' },
+  { slug: 'saint-adolphe-d-howard', region: 'Laurentides' },
+  { slug: 'wentworth-nord',  region: 'Laurentides' },
+  { slug: 'la-conception',   region: 'Laurentides' },
+  { slug: 'labelle',         region: 'Laurentides' },
+  { slug: 'riviere-rouge',   region: 'Laurentides' },
+  { slug: 'oka',             region: 'Laurentides' },
+  { slug: 'pointe-calumet',  region: 'Laurentides' },
+  { slug: 'saint-joseph-du-lac', region: 'Laurentides' },
+  // ── Lanaudière — ajouts ──
+  { slug: 'sainte-marie-salome', region: 'Lanaudière' },
+  { slug: 'saint-roch-de-l-achigan', region: 'Lanaudière' },
+  { slug: 'crabtree',        region: 'Lanaudière' },
+  { slug: 'saint-jean-de-matha', region: 'Lanaudière' },
+  { slug: 'saint-ambroise-de-kildare', region: 'Lanaudière' },
+  // ── Montérégie / couronne sud — ajouts ──
+  { slug: 'saint-amable',    region: 'Montérégie' },
+  { slug: 'contrecoeur',     region: 'Montérégie' },
+  { slug: 'vercheres',       region: 'Montérégie' },
+  { slug: 'otterburn-park',  region: 'Montérégie' },
+  { slug: 'mcmasterville',   region: 'Montérégie' },
+  { slug: 'saint-mathieu-de-beloeil', region: 'Montérégie' },
 ];
 
 // Catégorie Centris (texte) → type interne ImmoRadar
