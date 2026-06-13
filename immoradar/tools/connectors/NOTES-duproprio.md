@@ -38,6 +38,47 @@
 https://duproprio.com/fr/quebec-rive-sud/pintendre/bungalow-a-vendre/hab-386-rue-pamphile-le-may-1134318
 ```
 
+## DÉCOUVERTE CLÉ (2026-06-13) — passerelle api-proxy
+
+DuProprio a une passerelle JSON **`https://duproprio.com/fr/api-proxy/{resource}`**.
+
+Endpoint confirmé qui marche :
+```
+GET /fr/api-proxy/featured-homes?province=qc&page[size]=N
+```
+Retourne `{ "listings": [ { ... } ] }`. Schéma d'une annonce :
+```json
+{
+  "address": { "street": "...", "city": "Mirabel", "city_id": 702, "region": "Laurentides", "province": "QC" },
+  "photos": [{ "is_primary": true, "formats": { "320": "...", "1024": "..." } }],
+  "price": { "raw": 0, "display": "Prix sur demande", "term": "" },
+  "type": "Bungalow",
+  "id": "1126603",
+  "url": "/fr/laurentides/mirabel/bungalow-a-vendre/hab-...-1126603",
+  "photo": "https://photos.duproprio.com/photos/public/for_sale/.../...-320-....jpg"
+}
+```
+→ a TOUT sauf lat/lng. Mais `featured-homes` = annonces vedettes seulement.
+
+Endpoints recherche testés et **404** : `search`, `listings`, `properties`,
+`for-sale`, `homes`, `search-results`, `listings/search`.
+
+### Prochaine étape (la plus prometteuse)
+Trouver le vrai nom de l'endpoint de recherche sous `/fr/api-proxy/`.
+Méthode : Playwright sur `/fr/rechercher/liste`, **forcer le chargement des
+résultats** (scroll de la liste, ou clic sur vue Liste, ou attendre +10s) et
+intercepter la requête `api-proxy/...` qui ramène les ~40 annonces.
+Tester aussi `featured-homes` avec un filtre ville (`city_id`, `cities[]`) et
+un grand `page[size]` — il retourne peut-être plus que les vedettes.
+
+### Alternative sans API
+Le JSON-LD `SearchResultsPage` de la page HTML contient
+`mainEntity[0].itemListElement[].item = { url, geo:{latitude,longitude} }`
+(~40 annonces/page avec coordonnées). Le prix/détails sont sur la fiche
+individuelle (`url`) via son propre JSON-LD. Piège : `?pageNumber=N` casse
+le JSON-LD (pagination à régler autrement).
+
 ## Statut
 
-Repoussé. Centris (~2 800 annonces) couvre déjà la majorité du marché.
+Repoussé. Centris (~2 900 annonces) couvre déjà la majorité du marché.
+Beaucoup de pistes défrichées ci-dessus pour reprendre vite.
