@@ -224,6 +224,13 @@ function matches(l, f, shapes) {
   return inShapes(l, shapes);
 }
 
+// Proxy de récence : le numéro MLS croît avec le temps (les annonces récentes
+// ont un numéro plus élevé). Sert de tri « plus récentes » faute de vraie date.
+function mlsRank(l) {
+  let max = 0;
+  for (const src of l.sources || []) { const n = parseInt(src.sourceId, 10) || 0; if (n > max) max = n; }
+  return max;
+}
 function applySort(list) {
   const s = [...list];
   switch (state.sort) {
@@ -231,7 +238,13 @@ function applySort(list) {
     case 'price-desc': s.sort((a, b) => b.price - a.price); break;
     case 'area-desc': s.sort((a, b) => b.livingAreaSqft - a.livingAreaSqft); break;
     case 'lot-desc': s.sort((a, b) => b.lotAreaSqm - a.lotAreaSqm); break;
-    default: s.sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
+    default: s.sort((a, b) => {
+      // vraie date si dispo, sinon proxy MLS décroissant (mélange les villes)
+      if (a.publishedAt && b.publishedAt && a.publishedAt !== b.publishedAt) {
+        return b.publishedAt.localeCompare(a.publishedAt);
+      }
+      return mlsRank(b) - mlsRank(a);
+    });
   }
   return s;
 }
