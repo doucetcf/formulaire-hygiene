@@ -36,7 +36,14 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Diagnostic DuProprio (temporaire)
+        run: |
+          npm i playwright >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          node immoradar/tools/connectors/discover-duproprio.mjs || true
+
       - name: Récupérer les annonces Centris
+        if: false
         run: node immoradar/tools/connectors/centris.mjs
 
       - name: Vérifier si les données ont changé
