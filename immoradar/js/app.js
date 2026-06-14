@@ -282,6 +282,7 @@ function cardPhoto(l) {
   return ["<div class=\"card-photo\" style=\"", heroStyle(l), "\">",
     TYPE_EMOJI[l.type] || "\u{1F3E0}", cnt ? thumb : "", "</div>"].join("");
 }
+const CARD_LIMIT = 300;   // la liste ne rend que les N premières (perf) ; la carte garde tout
 function renderCards(list) {
   const wrap = $('#cards');
   if (!list.length) {
@@ -289,7 +290,12 @@ function renderCards(list) {
       Élargissez vos filtres ou modifiez votre secteur tracé. 🗺️</div>`;
     return;
   }
-  wrap.innerHTML = list.map((l) => `
+  const shown = list.slice(0, CARD_LIMIT);
+  const more = list.length - shown.length;
+  wrap.innerHTML = (more > 0
+      ? `<div class="more-note">Affichage des ${CARD_LIMIT} premières sur ${fmtNum(list.length)}. Affinez vos filtres ou tracez un secteur plus précis pour les voir toutes. La carte, elle, affiche tout.</div>`
+      : '')
+    + shown.map((l) => `
     <article class="card" data-id="${l.id}">
       ${cardPhoto(l)}
       <div class="card-body">
