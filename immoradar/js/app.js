@@ -71,6 +71,10 @@ function dedupe(rawListings) {
       if (raw.publishedAt < m.publishedAt) m.publishedAt = raw.publishedAt;
     } else {
       const { source, sourceId, url, ...prop } = raw;
+      // Le JSON est minifié et n'inclut plus le tableau `photos` ni
+      // `description` : on les reconstruit pour le reste de l'interface.
+      if (!prop.photos) prop.photos = prop.photoUrl ? [prop.photoUrl] : [];
+      if (prop.description == null) prop.description = '';
       byKey.set(key, { ...prop, id: key, sources: [src] });
     }
   }

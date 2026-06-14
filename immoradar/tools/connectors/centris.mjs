@@ -270,14 +270,11 @@ function parseCard(card, region) {
       centralAir: false,
     },
     photoUrl,
-    photos: photoUrl ? [photoUrl] : [],
-    photoCount: photoUrl ? 1 : 0,
-    photosAvailable: photoCount,        // total réel sur Centris
+    photosAvailable: photoCount,        // total réel sur Centris (le frontend dérive photos=[photoUrl])
     openHouse: /visite libre/i.test(card),
     repossession: /reprise|saisie/i.test(card),
     newConstruction: /construction neuve|neuf|nouveau projet/i.test(catRaw),
     publishedAt: null,   // non disponible sur la fiche de résultats Centris
-    description: '',
   };
 }
 
@@ -425,7 +422,7 @@ async function main() {
     listings: final,
   };
 
-  writeFileSync(OUT, JSON.stringify(output, null, 1));
+  writeFileSync(OUT, JSON.stringify(output));   // minifié (le fichier est gros)
   console.log(`\n✅ ${OUT}`);
   console.log(`   ${final.length} annonces au total`);
 }
