@@ -469,3 +469,13 @@ body {
   .map-wrap { grid-column: 1; }
   .tagline { display: none; }
 }
+
+.more-note {
+  background: #fff7e6;
+  border: 1px solid #ffd98a;
+  color: #6a4a00;
+  font-size: 12px;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
