@@ -78,7 +78,43 @@ Le JSON-LD `SearchResultsPage` de la page HTML contient
 individuelle (`url`) via son propre JSON-LD. Piège : `?pageNumber=N` casse
 le JSON-LD (pagination à régler autrement).
 
-## Statut
+## SESSION 2 (2026-06-14) — featured-homes décortiqué
 
-Repoussé. Centris (~2 900 annonces) couvre déjà la majorité du marché.
-Beaucoup de pistes défrichées ci-dessus pour reprendre vite.
+`GET /fr/api-proxy/featured-homes?parent=1&sort=-published_at&province=qc&page[size]=N&page[number]=P`
+
+Schéma d'une annonce (COMPLET) :
+```json
+{ "address": {"street","city","city_id","region","province"},
+  "photos": [...], "price": {"raw": 341873, "display": "341 873 $"},
+  "type": "Condo", "is_rental": false, "id": "1130021",
+  "url": "/fr/monteregie-rive-sud-montreal/brossard/condo-a-vendre/hab-...-1130021",
+  "photo": "https://photos.duproprio.com/.../...-320-....jpg" }
+```
+**Manque : lat/lng (coordonnées) et bedrooms/bathrooms.** ← bloquant pour la carte.
+
+**LIMITE MAJEURE** : `featured-homes` = pool de ~60 annonces VEDETTES seulement.
+`page[number]=2/3` renvoie les MÊMES 60 (en fetch sans session). Ce n'est donc
+PAS l'endpoint de recherche complet.
+
+IDs de régions DuProprio (param `regions[0]=` ) :
+6=Montréal/Île, 13=Laval, 14=Lanaudière, 15=Laurentides,
+16=Montérégie (Rive-Sud), + autres 1-18.
+
+## Où chercher l'endpoint de recherche complet (prochaine session)
+- Le navigateur (avec session/cookies complets) A capturé `page[number]=2`
+  renvoyant des annonces DIFFÉRENTES → la pagination marche AVEC session.
+  Donc refaire la capture Playwright mais EN CONSERVANT le contexte/session,
+  et scroller la VRAIE liste de résultats (181 items) pour voir quel endpoint
+  alimente ces 181 (différent de featured-homes).
+- Pour les coordonnées : soit la fiche individuelle (JSON-LD de chaque `url`),
+  soit le JSON-LD `SearchResultsPage` de la page (a `geo:{lat,lng}` par annonce).
+  Idée : joindre featured-homes (prix/type) ↔ JSON-LD (geo) par `url`.
+
+## Verdict honnête
+DuProprio protège bien ses données de recherche complètes (SPA + API de
+recherche non triviale + pas de coords dans l'API simple). Faisable mais
+demande encore 2-3 itérations Playwright avec session. À reprendre quand le
+budget le permet — les pistes ci-dessus évitent de repartir de zéro.
+
+## Statut
+Repoussé. Centris (~11 600 annonces) couvre la majorité du marché.
