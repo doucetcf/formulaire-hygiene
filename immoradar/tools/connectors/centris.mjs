@@ -24,8 +24,9 @@ const OUT = join(DATA_DIR, 'listings.json');
 const args = process.argv.slice(2);
 const DEBUG = args.includes('--debug');
 const dbg = (...a) => { if (DEBUG) console.log('[debug]', ...a); };
-// Pages max par ville (10 × 20 = 200 annonces/ville). Override : --max-pages=N
-const MAX_PAGES = Number(args.find((a) => a.startsWith('--max-pages='))?.split('=')[1]) || 10;
+// Pages max par ville (20 × 20 = 400 annonces/ville). Les petites villes
+// s'arrêtent d'elles-mêmes à la première page incomplète. Override : --max-pages=N
+const MAX_PAGES = Number(args.find((a) => a.startsWith('--max-pages='))?.split('=')[1]) || 20;
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const BASE = 'https://www.centris.ca';
@@ -341,29 +342,35 @@ async function fetchCity(meta) {
 
     const listings = [];
     const seen = new Set();
+    // Renvoie le nombre BRUT de cartes dans la page (pas le nombre parsé) :
+    // c'est lui qui dit si la page est complète. Une carte non-parsable ne
+    // doit PAS interrompre la pagination.
     const addCards = (rawHtml) => {
-      let n = 0;
-      for (const card of splitCards(rawHtml)) {
+      const cards = splitCards(rawHtml);
+      for (const card of cards) {
         const l = parseCard(card, meta.region);
-        if (l && !seen.has(l.sourceId)) { seen.add(l.sourceId); listings.push(l); n++; }
+        if (l && !seen.has(l.sourceId)) { seen.add(l.sourceId); listings.push(l); }
       }
-      return n;
+      return cards.length;
     };
 
     addCards(html);                         // page 1 (embarquée dans le HTML)
     const query = decodeSearchQuery(cookies);
 
-    // Pages suivantes via l'API GetInscriptions (s'arrête quand une page
-    // ramène moins de 20 annonces, ou à la limite MAX_PAGES).
+    // Pages suivantes via GetInscriptions. On continue tant qu'une page
+    // renvoie une grille pleine (20 cartes brutes) ; on s'arrête à la
+    // première page incomplète (vraie dernière page) ou à MAX_PAGES.
     if (query) {
+      let empties = 0;
       for (let page = 2; page <= MAX_PAGES; page++) {
-        await sleep(550 + Math.random() * 450);
-        let added;
+        await sleep(450 + Math.random() * 350);
+        let rawCount;
         try {
           const pageHtml = await getInscriptionsPage(meta, query, page, cookies);
-          added = addCards(pageHtml);
+          rawCount = addCards(pageHtml);
         } catch (e) { dbg(`${meta.slug} ${e.message}`); break; }
-        if (added < 20) break;              // dernière page atteinte
+        if (rawCount === 0 && ++empties >= 2) break;  // 2 pages vides = vraie fin
+        if (rawCount > 0 && rawCount < 20) break;      // page incomplète = dernière
       }
     } else dbg(`${meta.slug} : requête introuvable, page 1 seulement`);
 
