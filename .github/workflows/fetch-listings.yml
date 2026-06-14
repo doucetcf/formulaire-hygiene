@@ -36,7 +36,11 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Diagnostic pagination (temporaire)
+        run: node immoradar/tools/connectors/discover-pagination.mjs || true
+
       - name: Récupérer les annonces Centris
+        if: false
         run: node immoradar/tools/connectors/centris.mjs
 
       - name: Vérifier si les données ont changé
