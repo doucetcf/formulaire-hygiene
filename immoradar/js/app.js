@@ -323,7 +323,7 @@ function renderCards(list) {
           ${l.openHouse ? '<span class="badge-soft">Visite libre</span>' : ''}
           ${l.repossession ? '<span class="badge-soft">Reprise</span>' : ''}
           ${l.features.waterfront ? '<span class="badge-soft">Bord de l\'eau</span>' : ''}
-          ${daysOnMarket(l) !== null ? `<span class="badge-soft">${daysOnMarket(l)} j sur le marché</span>` : ''}
+          ${daysOnMarket(l) > 0 ? `<span class="badge-soft">sur le radar depuis ${daysOnMarket(l)} j</span>` : ''}
         </div>
       </div>
       <button class="fav-btn ${state.favorites.has(l.id) ? 'on' : ''}" data-fav="${l.id}" title="Ajouter aux favoris">
@@ -402,7 +402,7 @@ function openListing(id) {
       ${l.yearBuilt ? `<div><b>Année</b>${l.yearBuilt}</div>` : ''}
       ${l.units ? `<div><b>Logements</b>${l.units}</div>` : ''}
       ${l.revenue ? `<div><b>Revenus annuels</b>${fmtPrice(l.revenue)}</div>` : ''}
-      ${daysOnMarket(l) !== null ? `<div><b>Sur le marché</b>${daysOnMarket(l)} jour(s)</div>` : ''}
+      ${daysOnMarket(l) > 0 ? `<div><b>Sur le radar depuis</b>${daysOnMarket(l)} jour(s)</div>` : ''}
       ${l.publishedAt ? `<div><b>Publication</b>${l.publishedAt}</div>` : ''}
     </div>
 
