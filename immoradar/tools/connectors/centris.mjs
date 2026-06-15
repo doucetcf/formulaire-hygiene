@@ -406,14 +406,29 @@ async function main() {
   }
 
   // Conserve les annonces BRUTES d'autres sources (DuProprio/Ubee à venir)
+  // ET récupère la date de première apparition de chaque annonce déjà connue.
   let preserved = [];
+  const firstSeenById = new Map();   // sourceId -> date (AAAA-MM-JJ) de 1re apparition
   if (existsSync(OUT)) {
     try {
       const prev = JSON.parse(readFileSync(OUT, 'utf-8'));
       preserved = (prev.listings || []).filter((l) => l.source && l.source !== 'centris');
       if (preserved.length) console.log(`📦 Annonces d'autres sources conservées : ${preserved.length}`);
+      for (const l of prev.listings || []) {
+        if (l.sourceId && (l.firstSeen || l.publishedAt)) firstSeenById.set(l.sourceId, l.firstSeen || l.publishedAt);
+      }
     } catch { /* ignore */ }
   }
+
+  // Affecte firstSeen : on garde la date connue, sinon aujourd'hui (= annonce neuve).
+  const today = new Date().toISOString().slice(0, 10);
+  let nouvelles = 0;
+  for (const l of centris) {
+    l.firstSeen = firstSeenById.get(l.sourceId) || today;
+    l.publishedAt = l.firstSeen;        // le frontend trie/affiche via publishedAt
+    if (l.firstSeen === today && firstSeenById.size) nouvelles++;
+  }
+  if (firstSeenById.size) console.log(`🆕 Nouvelles annonces depuis le dernier passage : ${nouvelles}`);
 
   const final = [...centris, ...preserved];
   const output = {
