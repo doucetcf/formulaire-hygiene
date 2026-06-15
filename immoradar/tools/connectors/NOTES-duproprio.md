@@ -116,5 +116,32 @@ recherche non triviale + pas de coords dans l'API simple). Faisable mais
 demande encore 2-3 itérations Playwright avec session. À reprendre quand le
 budget le permet — les pistes ci-dessus évitent de repartir de zéro.
 
+## SESSION 3 (2026-06-15) — verdict via Playwright (DOM rendu)
+
+- Page `rechercher/liste?search=true` SANS filtre = affiche les **vedettes**
+  (~12 cartes province-wide), pas de vrais résultats de recherche.
+- Capture réseau : SEULE `featured-homes` apparaît (pool ~80). Pas d'API de
+  recherche séparée déclenchée au chargement/scroll.
+- **DOM rendu scrapable** : chaque carte a prix + ville + adresse + type + url
+  dans son texte/href. Ex : href `/fr/monteregie-rive-sud-montreal/brossard/
+  condo-a-vendre/...`, texte « 420 000 $ Brossard 8-8095 rue de Londres … ».
+  → MAIS **pas de coordonnées GPS** dans la carte.
+
+## Chemin viable (mais lourd) pour une vraie intégration
+1. Playwright : soumettre une recherche par RÉGION (regions[0]=15 etc.) via
+   l'UI, attendre le rendu, scroller/paginer pour charger toutes les cartes.
+2. Scraper chaque carte (prix/ville/adresse/type/url depuis le DOM rendu).
+3. Coordonnées : joindre au JSON-LD `SearchResultsPage` (a geo par url) OU
+   visiter chaque fiche. Étape supplémentaire obligatoire.
+→ Implique Playwright DANS le cron (navigateur + scroll + scrape par région,
+   toutes les 2 h) = lourd, plus lent, plus fragile.
+
+## VERDICT
+Faisable mais c'est un vrai projet (Playwright en production + jointure
+coordonnées + maintenance). Pour un outil perso où **Centris couvre déjà
+~85 % du marché (11 600 annonces)**, le gain marginal de DuProprio (~15-20 %,
+les sans-courtier) ne justifie pas la complexité/coût pour l'instant.
+À reprendre dans une session dédiée si le besoin se confirme.
+
 ## Statut
-Repoussé. Centris (~11 600 annonces) couvre la majorité du marché.
+Repoussé (verdict ci-dessus). Centris couvre la majorité du marché.
